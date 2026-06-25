@@ -874,101 +874,108 @@
         }
 
         // ========== 游戏核心 ==========
-        function init() {
-            loadHighScore();
-            scene = new THREE.Scene(); 
-            scene.background = new THREE.Color(0x0a0a12);
-            scene.fog = new THREE.FogExp2(0x0a0a12, 0.003);
-            
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
-            
-            renderer = new THREE.WebGLRenderer({ 
-                antialias: true, 
-                powerPreference: "high-performance" 
-            });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.shadowMap.enabled = true; 
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.toneMapping = THREE.ACESFilmicToneMapping; 
-            renderer.toneMappingExposure = 1.2;
-            renderer.shadowMap.bias = 0.0001;
-            document.body.appendChild(renderer.domElement);
+function init() {
+    loadHighScore();
+    scene = new THREE.Scene(); 
+    scene.background = new THREE.Color(0x0a0a12);
+    scene.fog = new THREE.FogExp2(0x0a0a12, 0.003);
+    
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
+    
+    renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        powerPreference: "high-performance" 
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true; 
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; 
+    renderer.toneMappingExposure = 1.2;
+    renderer.shadowMap.bias = 0.0001;
+    document.body.appendChild(renderer.domElement);
 
-            setupLighting();
-            
-            flashLight = new THREE.PointLight(0xffffff, 0, 50);
-            flashLight.position.set(COLS/2-0.5, ROWS/2, 10); 
-            scene.add(flashLight);
+    setupLighting();
+    
+    flashLight = new THREE.PointLight(0xffffff, 0, 50);
+    flashLight.position.set(COLS/2-0.5, ROWS/2, 10); 
+    scene.add(flashLight);
 
-            composer = new EffectComposer(renderer);
-            composer.addPass(new RenderPass(scene, camera));
-            composer.addPass(new UnrealBloomPass(
-                new THREE.Vector2(window.innerWidth, window.innerHeight), 
-                0.25, 0.05, 0.5
-            ));
-            const fxaa = new ShaderPass(FXAAShader);
-            fxaa.uniforms['resolution'].value.set(1/window.innerWidth, 1/window.innerHeight);
-            composer.addPass(fxaa);
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    composer.addPass(new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight), 
+        0.25, 0.05, 0.5
+    ));
+    const fxaa = new ShaderPass(FXAAShader);
+    fxaa.uniforms['resolution'].value.set(1/window.innerWidth, 1/window.innerHeight);
+    composer.addPass(fxaa);
 
-            boardGroup = new THREE.Group(); 
-            activeGroup = new THREE.Group(); 
-            scene.add(boardGroup, activeGroup);
-            
-            createBackground(); 
-            createMechFrame();   // ★ 流光边框
-            createPreviewPanel(); 
-            initShatterSystem();
-            
-            baseCamTarget.set(COLS/2-0.5, ROWS/2-1.0, 0);
-            baseCamPos.set(COLS/2-0.5, ROWS/2-1.0+CAM_HEIGHT_OFFSET, CAM_DISTANCE);
-            camera.position.copy(baseCamPos); 
-            camera.lookAt(baseCamTarget);
-            
-            onResize();
-            window.addEventListener('resize', onResize);
-            document.addEventListener('keydown', onKey);
-            setupGestures();
+    boardGroup = new THREE.Group(); 
+    activeGroup = new THREE.Group(); 
+    scene.add(boardGroup, activeGroup);
+    
+    createBackground(); 
+    createMechFrame();   // ★ 流光边框
+    createPreviewPanel(); 
+    initShatterSystem();
+    
+    baseCamTarget.set(COLS/2-0.5, ROWS/2-1.0, 0);
+    baseCamPos.set(COLS/2-0.5, ROWS/2-1.0+CAM_HEIGHT_OFFSET, CAM_DISTANCE);
+    camera.position.copy(baseCamPos); 
+    camera.lookAt(baseCamTarget);
+    
+    onResize();
+    window.addEventListener('resize', onResize);
+    document.addEventListener('keydown', onKey);
+    setupGestures();
 
-            document.getElementById('restart-btn').addEventListener('touchend', e => { 
-                e.preventDefault(); e.stopPropagation(); resetGame(); 
-            });
-            document.getElementById('restart-btn').addEventListener('click', e => { 
-                e.preventDefault(); e.stopPropagation(); resetGame(); 
-            });
+    document.getElementById('restart-btn').addEventListener('touchend', e => { 
+        e.preventDefault(); e.stopPropagation(); resetGame(); 
+    });
+    document.getElementById('restart-btn').addEventListener('click', e => { 
+        e.preventDefault(); e.stopPropagation(); resetGame(); 
+    });
 
-            // ★★★ 炸弹引爆按钮修复（防止重复触发） ★★★
-            const bombBtn = document.getElementById('bomb-btn');
-            let isExploding = false;
+    // ★★★ 炸弹引爆按钮修复（防重复触发） ★★★
+    const bombBtn = document.getElementById('bomb-btn');
+    let isExploding = false;
+    let explodeTimeout = null;
 
-            function triggerBombExplode() {
-                if (isExploding) return;
-                isExploding = true;
-                if (currentPiece && currentPiece.color === 8 && !isGameOver && !isPaused) {
-                    const bombShape = currentPiece.shape;
-                    const bombX = currentPiece.x;
-                    const bombY = currentPiece.y;
-                    for (let r = 0; r < bombShape.length; r++) {
-                        for (let c = 0; c < bombShape[r].length; c++) {
-                            if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
-                                board[bombY + r][bombX + c] = 8;
-                            }
-                        }
+    function triggerBombExplode() {
+        if (isExploding) return;
+        isExploding = true;
+        if (currentPiece && currentPiece.color === 8 && !isGameOver && !isPaused) {
+            const bombShape = currentPiece.shape;
+            const bombX = currentPiece.x;
+            const bombY = currentPiece.y;
+            for (let r = 0; r < bombShape.length; r++) {
+                for (let c = 0; c < bombShape[r].length; c++) {
+                    if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
+                        board[bombY + r][bombX + c] = 8;
                     }
-                    while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
-                    bombExplosion(bombX, bombY, bombShape);
-                    spawnPiece();
                 }
-                isExploding = false;
             }
-
-            // 使用 pointerdown 事件（同时支持鼠标和触摸，且不会触发两次）
-            bombBtn.addEventListener('pointerdown', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                triggerBombExplode();
-            });
+            while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
+            bombExplosion(bombX, bombY, bombShape);
+            // 强制清除 currentPiece，避免残留
+            currentPiece = null;
+            spawnPiece();
         }
+        // 延迟重置标志，防止快速重复点击
+        clearTimeout(explodeTimeout);
+        explodeTimeout = setTimeout(() => {
+            isExploding = false;
+        }, 200);
+    }
+
+    // 只使用 click 事件（移动端会触发 click，但不会像 touchstart 那样容易重复）
+    bombBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerBombExplode();
+    });
+}
 
         function createBackground() {
             const c = document.createElement('canvas'); 
