@@ -1,0 +1,91 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Capacitor
+        run: |
+          chmod +x node_modules/.bin/cap
+          npx cap sync ios
+
+      - name: Copy Web Assets to Bundle
+        run: |
+          mkdir -p ios/App/public
+          cp -v www/index.html ios/App/public/
+          cp -v www/tetris3d.html ios/App/public/
+          cp -v www/three.module.js ios/App/public/ 2>/dev/null || cp -v three.module.js ios/App/public/
+          cp -r examples ios/App/public/ 2>/dev/null
+
+      - name: Fix AppDelegate
+        run: |
+          cat > ios/App/App/AppDelegate.swift << 'EOF'
+          import UIKit
+          import Capacitor
+
+          @UIApplicationMain
+          class AppDelegate: UIResponder, UIApplicationDelegate {
+              var window: UIWindow?
+              func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+                  return true
+              }
+          }
+          EOF
+
+      - name: Set Dummy Team
+        run: |
+          cd ios/App
+          find . -name "project.pbxproj" -exec sed -i '' 's/DEVELOPMENT_TEAM = ""/DEVELOPMENT_TEAM = 0000000000/g' {} \;
+
+      - name: Archive and Create IPA
+        run: |
+          cd ios/App
+          
+          if [ -d "App.xcworkspace" ]; then
+            PROJECT="App.xcworkspace"
+            FLAG="-workspace"
+          else
+            PROJECT="App.xcodeproj"
+            FLAG="-project"
+          fi
+          
+          xcodebuild \
+            $FLAG "$PROJECT" \
+            -scheme App \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath $PWD/build/App.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM=0000000000 \
+            archive
+            
+          mkdir -p Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app Payload/
+          zip -r ../../Tetris3D.ipa Payload/
+          rm -rf Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tetris3D-iOS
+          path: Tetris3D.ipa

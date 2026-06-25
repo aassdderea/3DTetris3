@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>刘海港自制Tetris - 流光边框</title>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            margin: 0; overflow: hidden; background: #0a0a12;
+            font-family: -apple-system, 'Segoe UI', sans-serif;
+            user-select: none; -webkit-user-select: none;
+            touch-action: none; position: fixed; width: 100%; height: 100%;
+        }
+        #ui-panel {
+            position: fixed; 
+            top: env(safe-area-inset-top, 12px); 
+            left: 12px; 
+            z-index: 100;
+            background: rgba(0,0,0,0.55); 
+            border-radius: 12px; 
+            padding: 8px 14px;
+            border: 1px solid rgba(255,255,255,0.06); 
+            pointer-events: none;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        h1 {
+            margin: 0; font-size: 14px; font-weight: 900; letter-spacing: 2px;
+            background: linear-gradient(135deg, #ff6b81, #ffa502, #00d2d3, #a55eea);
+            background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: grad 4s ease infinite;
+        }
+        @keyframes grad { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+        .stat-row { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; }
+        .stat-label { font-size: 8px; letter-spacing: 1px; color: rgba(255,255,255,0.4); }
+        #score { font-size: 18px; font-weight: 900; color: #fff; text-shadow: 0 0 20px rgba(255,255,255,0.1); }
+        #high-score-row { margin-top: 1px; }
+        #high-score { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.4); }
+        #next-label {
+            position: fixed; 
+            top: env(safe-area-inset-top, 12px); 
+            right: 12px; 
+            z-index: 100;
+            font-size: 10px; 
+            font-weight: 700; 
+            letter-spacing: 2px; 
+            color: rgba(255,255,255,0.35);
+            background: rgba(0,0,0,0.3); 
+            padding: 4px 10px; 
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            pointer-events: none;
+        }
+        .overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.85); z-index: 9999; flex-direction: column; pointer-events: auto;
+        }
+        .overlay h2 {
+            color: #fff; font-size: 36px; font-weight: 900; margin-bottom: 10px; letter-spacing: 4px;
+            background: linear-gradient(135deg, #ff4757, #ff6b81); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .overlay .sub { font-size: 16px; color: rgba(255,255,255,0.5); margin-bottom: 28px; }
+        button {
+            padding: 16px 44px; font-size: 16px; font-weight: 700; letter-spacing: 3px;
+            background: linear-gradient(135deg, #ff4757, #ff6b81); border: none; color: #fff; border-radius: 28px; cursor: pointer;
+            box-shadow: 0 8px 30px rgba(255,71,87,0.4); pointer-events: auto; z-index: 10000;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        button:active { transform: scale(0.95); opacity: 0.85; }
+        #gesture-hint {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            color: rgba(255,255,255,0.25); font-size: 11px; z-index: 100; text-align: center; pointer-events: none;
+            background: rgba(0,0,0,0.35); padding: 6px 14px; border-radius: 14px;
+            transition: opacity 1s;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            white-space: nowrap;
+        }
+        #pause-indicator {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.9); font-size: 40px; font-weight: 900; letter-spacing: 10px; pointer-events: none;
+            display: none; z-index: 50;
+            text-shadow: 0 0 40px rgba(255,255,255,0.2);
+        }
+        #flash-overlay {
+            position: fixed; inset: 0; z-index: 50;
+            background: radial-gradient(ellipse at center, rgba(255,255,255,0.15) 0%, transparent 70%);
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.05s ease-out;
+        }
+        #flash-overlay.active { opacity: 1; transition: none; }
+        .score-bump {
+            animation: bump 0.15s ease-out;
+        }
+        @keyframes bump {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); color: #ffdd44; text-shadow: 0 0 30px rgba(255,220,68,0.4); }
+            100% { transform: scale(1); }
+        }
+        #bomb-btn {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999; /* 提高层级 */
+            padding: 12px 30px;
+            font-size: 18px;
+            font-weight: 700;
+            background: radial-gradient(circle at center, #ff6b81, #c0392b);
+            border: 2px solid #ff6b81;
+            border-radius: 30px;
+            color: #fff;
+            box-shadow: 0 0 30px rgba(255,107,129,0.6);
+            cursor: pointer;
+            display: none;
+            pointer-events: auto;
+            font-family: -apple-system, sans-serif;
+            letter-spacing: 1px;
+        }
+        #bomb-btn:active { transform: translateX(-50%) scale(0.92); }
+        @media (max-width: 480px) {
+            #ui-panel { padding: 5px 8px; left: 4px; top: 4px; border-radius: 6px; }
+            h1 { font-size: 10px; letter-spacing: 1px; }
+            #score { font-size: 13px; }
+            #high-score { font-size: 9px; }
+            .stat-label { font-size: 6px; }
+            #next-label { font-size: 7px; padding: 2px 6px; right: 4px; top: 4px; }
+            #gesture-hint { font-size: 7px; padding: 3px 8px; bottom: 8px; white-space: normal; max-width: 92%; }
+            .overlay h2 { font-size: 20px; }
+            .overlay .sub { font-size: 11px; margin-bottom: 16px; }
+            button { padding: 10px 24px; font-size: 11px; }
+            #bomb-btn { bottom: 80px; padding: 10px 22px; font-size: 16px; }
+        }
+    </style>
+    <script type="importmap">
+    { "imports": { "three": "./three.module.js", "three/addons/": "./examples/jsm/" }}
+    </script>
+</head>
+<body>
+    <div id="ui-panel">
+        <h1>刘海港自制Tetris</h1>
+        <div class="stat-row"><span class="stat-label">Score</span><span id="score">0</span></div>
+        <div class="stat-row" id="high-score-row"><span class="stat-label">Best</span><span id="high-score">0</span></div>
+    </div>
+    <div id="next-label">NEXT</div>
+    <div id="pause-indicator">PAUSED</div>
+    <div id="gameover-overlay" class="overlay">
+        <h2>GAME OVER</h2>
+        <div class="sub" id="final-score">FINAL SCORE: 0</div>
+        <button id="restart-btn">RESTART</button>
+    </div>
+    <div id="gesture-hint">← 左滑 → 右滑 | ↑ 旋转 | ↓ 加速 | 长按加速 | 双击暂停</div>
+    <div id="flash-overlay"></div>
+    <button id="bomb-btn">💥 引爆</button>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+        import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+        const COLS = 10, ROWS = 20;
+        const COLORS = [0x000000, 0xff4757, 0x2ed573, 0x1e90ff, 0xffa502, 0xa55eea, 0x00d2d3, 0xf1c40f];
+        const SHAPES = [
+            [], [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]],
+            [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]], [[0,1,1],[1,1,0]], [[1,1,0],[0,1,1]]
+        ];
+
+        let scene, camera, renderer, composer;
+        let boardGroup, activeGroup, previewGroup;
+        let board = [], score = 0, highScore = 0, dropInterval = 800, lastDrop = 0;
+        let isGameOver = false, isPaused = false;
+        let currentPiece = null, nextPieceType = 0;
+        let previewLedStrips = [];
+        let frameLedStrips = [];
+        let flashLight, shakeIntensity = 0;
+        const CAM_DISTANCE = 30, CAM_HEIGHT_OFFSET = 2;
+        let baseCamPos = new THREE.Vector3(), baseCamTarget = new THREE.Vector3();
+        let fastDropActive = false, fastDropTimer = null;
+        let hitstop = 0;
+        let isLocking = false;
+
+        // ========== 镜头震动系统 ==========
+        const shakeLayers = [];
+
+        function addShake(intensity, duration, frequency = 30, decay = 'exponential') {
+            shakeLayers.push({
+                intensity,
+                duration,
+                elapsed: 0,
+                frequency,
+                decay,
+                phaseX: Math.random() * Math.PI * 2,
+                phaseY: Math.random() * Math.PI * 2,
+                phaseZ: Math.random() * Math.PI * 2
+            });
+        }
+
+        function updateShake(dt) {
+            let totalOffsetX = 0, totalOffsetY = 0, totalOffsetZ = 0;
+
+            for (let i = shakeLayers.length - 1; i >= 0; i--) {
+                const layer = shakeLayers[i];
+                layer.elapsed += dt;
+
+                if (layer.elapsed >= layer.duration) {
+                    shakeLayers.splice(i, 1);
+                    continue;
+                }
+
+                const t = layer.elapsed / layer.duration;
+                let envelope;
+                switch (layer.decay) {
+                    case 'punch':
+                        envelope = Math.sin(t * Math.PI) * Math.exp(-t * 4);
+                        break;
+                    case 'linear':
+                        envelope = 1 - t;
+                        break;
+                    case 'exponential':
+                    default:
+                        envelope = Math.exp(-t * 6);
+                        break;
+                }
+
+                const amp = layer.intensity * envelope;
+                const freq = layer.frequency * layer.elapsed;
+
+                totalOffsetX += Math.sin(freq * 6.2832 + layer.phaseX) * amp;
+                totalOffsetY += Math.sin(freq * 6.2832 * 1.3 + layer.phaseY) * amp;
+                totalOffsetZ += Math.sin(freq * 6.2832 * 0.7 + layer.phaseZ) * amp * 0.4;
+            }
+
+            camera.position.set(
+                baseCamPos.x + totalOffsetX,
+                baseCamPos.y + totalOffsetY,
+                baseCamPos.z + totalOffsetZ
+            );
+            camera.lookAt(baseCamTarget);
+        }
+
+        // ========== 精简全局光照 ==========
+        function setupLighting() {
+            const ambient = new THREE.AmbientLight(0x556688, 0.6);
+            scene.add(ambient);
+
+            const mainLight = new THREE.DirectionalLight(0xffeedd, 2.2);
+            mainLight.position.set(0, 18, 20);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.set(1024, 1024);
+            mainLight.shadow.camera.near = 0.1;
+            mainLight.shadow.camera.far = 50;
+            mainLight.shadow.camera.left = -12;
+            mainLight.shadow.camera.right = 12;
+            mainLight.shadow.camera.top = 22;
+            mainLight.shadow.camera.bottom = -4;
+            mainLight.shadow.bias = -0.0008;
+            scene.add(mainLight);
+
+            const fillLight = new THREE.DirectionalLight(0x88aaff, 0.6);
+            fillLight.position.set(-8, 6, 6);
+            scene.add(fillLight);
+
+            const bottomLight = new THREE.DirectionalLight(0x4466aa, 0.3);
+            bottomLight.position.set(0, -8, 4);
+            scene.add(bottomLight);
+        }
+
+        // ========== 碎裂特效系统 ==========
+        const MAX_DEBRIS = 6000;
+        const DUST_COUNT = 1000;
+        
+        let debrisMesh, debrisData = [];
+        let dustPoints, dustPositions, dustSizes, dustVelocities, dustLifetimes;
+        let dustActiveCount = 0;
+        let shockRings = [];
+        let pointLightBurst;
+        const flashEl = document.getElementById('flash-overlay');
+        
+        let flashSprites = [];
+        let flashSpriteTexture = null;
+        
+        const fragmentGeos = [
+            new THREE.BoxGeometry(0.20, 0.10, 0.14),
+            new THREE.BoxGeometry(0.16, 0.14, 0.10),
+            new THREE.BoxGeometry(0.10, 0.08, 0.18),
+            new THREE.BoxGeometry(0.22, 0.08, 0.08),
+            new THREE.BoxGeometry(0.08, 0.16, 0.10),
+            new THREE.BoxGeometry(0.14, 0.06, 0.22),
+            new THREE.DodecahedronGeometry(0.07, 0),
+            new THREE.TetrahedronGeometry(0.09, 0),
+            new THREE.OctahedronGeometry(0.08, 0),
+            new THREE.ConeGeometry(0.06, 0.14, 4),
+            new THREE.CylinderGeometry(0.05, 0.08, 0.10, 5),
+        ];
+
+        function loadHighScore() {
+            try { const s = localStorage.getItem('tetris3d_highscore'); if (s) highScore = parseInt(s) || 0; } catch(e) {}
+            document.getElementById('high-score').innerText = highScore;
+        }
+        function saveHighScore() {
+            try { localStorage.setItem('tetris3d_highscore', highScore.toString()); } catch(e) {}
+            document.getElementById('high-score').innerText = highScore;
+        }
+        function fireKey(key) { document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })); }
+
+        function setupGestures() {
+            let startX = 0, startY = 0, startTime = 0, lastTapTime = 0;
+            document.addEventListener('touchstart', e => {
+                if (isGameOver) return;
+                if (e.touches.length === 1) {
+                    startX = e.touches[0].clientX; startY = e.touches[0].clientY; startTime = Date.now();
+                    clearTimeout(fastDropTimer);
+                    fastDropTimer = setTimeout(() => { 
+                        if (!isGameOver && !isPaused) fastDropActive = true; 
+                    }, 200);
+                }
+                e.preventDefault();
+            }, { passive: false });
+            document.addEventListener('touchmove', e => {
+                if (isGameOver) return;
+                e.preventDefault();
+                if (Math.abs(e.touches[0].clientX - startX) > 10 || Math.abs(e.touches[0].clientY - startY) > 10) {
+                    clearTimeout(fastDropTimer); fastDropActive = false;
+                }
+            }, { passive: false });
+            document.addEventListener('touchend', e => {
+                if (isGameOver) return;
+                e.preventDefault(); 
+                clearTimeout(fastDropTimer); 
+                fastDropActive = false;
+                const dx = e.changedTouches[0].clientX - startX, dy = e.changedTouches[0].clientY - startY, dt = Date.now() - startTime;
+                const absDx = Math.abs(dx), absDy = Math.abs(dy);
+                if (absDx < 15 && absDy < 15 && dt < 300) {
+                    const now = Date.now();
+                    if (now - lastTapTime < 350) { fireKey('p'); lastTapTime = 0; return; }
+                    lastTapTime = now; return;
+                }
+                if (absDx < 25 && absDy < 25) return;
+                if (absDy > absDx) fireKey(dy < -40 ? 'ArrowUp' : dy > 40 ? ' ' : '');
+                else fireKey(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
+            });
+            setTimeout(() => { const h = document.getElementById('gesture-hint'); if (h) h.style.opacity = '0'; }, 4000);
+        }
+
+        function createFlashTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.2, 'rgba(255,255,255,0.9)');
+            gradient.addColorStop(0.5, 'rgba(255,240,200,0.5)');
+            gradient.addColorStop(0.8, 'rgba(255,200,150,0.15)');
+            gradient.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 128, 128);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        }
+
+        function initShatterSystem() {
+            const debrisMat = new THREE.MeshStandardMaterial({
+                roughness: 0.8,
+                metalness: 0.0,
+                flatShading: true,
+            });
+            debrisMesh = new THREE.InstancedMesh(fragmentGeos[0], debrisMat, MAX_DEBRIS);
+            debrisMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            debrisMesh.castShadow = true;
+            scene.add(debrisMesh);
+
+            const dummy = new THREE.Object3D();
+            dummy.scale.set(0, 0, 0);
+            dummy.updateMatrix();
+            const colorArray = new Float32Array(MAX_DEBRIS * 3);
+            
+            for (let i = 0; i < MAX_DEBRIS; i++) {
+                debrisMesh.setMatrixAt(i, dummy.matrix);
+                debrisData.push({
+                    active: false,
+                    life: 0,
+                    maxLife: 0,
+                    vel: new THREE.Vector3(),
+                    pos: new THREE.Vector3(),
+                    rot: new THREE.Euler(),
+                    rotSpeed: new THREE.Vector3(),
+                    scale: 1,
+                    color: 0x888888,
+                    geoType: 0,
+                });
+                colorArray[i*3] = 0.5;
+                colorArray[i*3+1] = 0.5;
+                colorArray[i*3+2] = 0.5;
+            }
+            debrisMesh.instanceMatrix.needsUpdate = true;
+            debrisMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
+            debrisMesh.instanceColor.needsUpdate = true;
+
+            const dustGeo = new THREE.BufferGeometry();
+            dustPositions = new Float32Array(DUST_COUNT * 3);
+            dustSizes = new Float32Array(DUST_COUNT);
+            dustVelocities = [];
+            dustLifetimes = [];
+            
+            for (let i = 0; i < DUST_COUNT; i++) {
+                dustPositions[i*3] = 0;
+                dustPositions[i*3+1] = -100;
+                dustPositions[i*3+2] = 0;
+                dustSizes[i] = 0.03 + Math.random() * 0.12;
+                dustVelocities.push(new THREE.Vector3());
+                dustLifetimes.push(0);
+            }
+            dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+            dustGeo.setAttribute('size', new THREE.BufferAttribute(dustSizes, 1));
+
+            const dustMat = new THREE.PointsMaterial({
+                color: 0xccbbaa,
+                size: 0.05,
+                transparent: true,
+                opacity: 0.4,
+                blending: THREE.NormalBlending,
+                depthWrite: false,
+                sizeAttenuation: true,
+            });
+            dustPoints = new THREE.Points(dustGeo, dustMat);
+            scene.add(dustPoints);
+
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+            });
+            const ringGeo = new THREE.RingGeometry(0.02, 0.05, 32);
+            for (let i = 0; i < 6; i++) {
+                const ring = new THREE.Mesh(ringGeo, ringMat.clone());
+                ring.visible = false;
+                ring.userData = { life: 0, maxLife: 0 };
+                scene.add(ring);
+                shockRings.push(ring);
+            }
+
+            pointLightBurst = new THREE.PointLight(0xff8844, 0, 15);
+            pointLightBurst.position.set(COLS/2-0.5, ROWS/2-1, 2);
+            scene.add(pointLightBurst);
+
+            flashSpriteTexture = createFlashTexture();
+            for (let i = 0; i < 6; i++) {
+                const mat = new THREE.SpriteMaterial({
+                    map: flashSpriteTexture,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                    opacity: 0,
+                });
+                const sprite = new THREE.Sprite(mat);
+                sprite.scale.set(0, 0, 0);
+                sprite.visible = false;
+                sprite.userData = { life: 0, maxLife: 0, maxScale: 0 };
+                scene.add(sprite);
+                flashSprites.push(sprite);
+            }
+        }
+
+        function triggerFlash(position, intensity = 1.0) {
+            for (const sprite of flashSprites) {
+                if (!sprite.visible) {
+                    sprite.visible = true;
+                    sprite.position.copy(position);
+                    sprite.position.z = 0.5;
+                    const maxScale = 6 + intensity * 4;
+                    sprite.userData.maxLife = 0.25 + intensity * 0.1;
+                    sprite.userData.life = sprite.userData.maxLife;
+                    sprite.userData.maxScale = maxScale;
+                    sprite.scale.set(0.3, 0.3, 1);
+                    sprite.material.opacity = 0.9 * Math.min(intensity, 1.5);
+                    return;
+                }
+            }
+            const sprite = flashSprites[0];
+            sprite.visible = true;
+            sprite.position.copy(position);
+            sprite.position.z = 0.5;
+            const maxScale = 6 + intensity * 4;
+            sprite.userData.maxLife = 0.25 + intensity * 0.1;
+            sprite.userData.life = sprite.userData.maxLife;
+            sprite.userData.maxScale = maxScale;
+            sprite.scale.set(0.3, 0.3, 1);
+            sprite.material.opacity = 0.9 * Math.min(intensity, 1.5);
+        }
+
+        function updateFlashSprites(dt) {
+            for (const sprite of flashSprites) {
+                if (!sprite.visible) continue;
+                sprite.userData.life -= dt;
+                if (sprite.userData.life <= 0) {
+                    sprite.visible = false;
+                    sprite.material.opacity = 0;
+                    continue;
+                }
+                const t = sprite.userData.life / sprite.userData.maxLife;
+                const scaleFactor = Math.sin(t * Math.PI) * 1.2 + 0.1;
+                const currentScale = sprite.userData.maxScale * scaleFactor;
+                sprite.scale.set(currentScale, currentScale, 1);
+                sprite.material.opacity = t * t * 0.9 * Math.min(sprite.userData.maxLife * 2, 1);
+            }
+        }
+
+        function spawnDust(pos, count, spread, speed) {
+            for (let i = 0; i < count && dustActiveCount < DUST_COUNT; i++) {
+                const idx = dustActiveCount;
+                dustPositions[idx*3] = pos.x + (Math.random() - 0.5) * spread;
+                dustPositions[idx*3+1] = pos.y + (Math.random() - 0.5) * spread * 0.5;
+                dustPositions[idx*3+2] = pos.z + (Math.random() - 0.5) * spread;
+                dustVelocities[idx].set(
+                    (Math.random() - 0.5) * speed,
+                    Math.random() * speed * 0.8,
+                    (Math.random() - 0.5) * speed
+                );
+                dustLifetimes[idx] = 1.5 + Math.random() * 2.5;
+                dustActiveCount++;
+            }
+        }
+
+        function triggerBombShatter(row, rowColors, centerX, centerY) {
+            hitstop = 3;
+            const flashPos = new THREE.Vector3(centerX, centerY, 0);
+            triggerFlash(flashPos, 1.5);
+            flashEl.classList.add('active');
+            setTimeout(() => flashEl.classList.remove('active'), 80);
+            addShake(1.8, 0.4, 12, 'punch');
+            addShake(0.8, 0.3, 45, 'exponential');
+            addShake(0.3, 0.7, 5, 'linear');
+            for (let w = 0; w < 4; w++) {
+                setTimeout(() => {
+                    for (const ring of shockRings) {
+                        if (!ring.visible) {
+                            ring.visible = true;
+                            ring.userData.life = ring.userData.maxLife = 0.6;
+                            ring.position.set(
+                                centerX + (Math.random()-0.5) * 4,
+                                centerY + (Math.random()-0.5) * 3,
+                                0.15
+                            );
+                            ring.scale.set(0.03, 0.03, 0.03);
+                            ring.material.opacity = 0.9;
+                            ring.material.color.setHSL(0.08 + Math.random()*0.1, 0.9, 0.7);
+                            break;
+                        }
+                    }
+                }, w * 70);
+            }
+            pointLightBurst.intensity = 35;
+            pointLightBurst.color.setHSL(0.08, 0.9, 0.7);
+            pointLightBurst.position.set(centerX, centerY, 2);
+            setTimeout(() => { pointLightBurst.intensity = 0; }, 500);
+
+            const colorSet = [];
+            if (rowColors && rowColors.length > 0) {
+                rowColors.forEach(c => colorSet.push(new THREE.Color(c)));
+            }
+            while (colorSet.length < 5) {
+                const c = COLORS[Math.floor(Math.random() * COLORS.length) + 1] || 0xff4757;
+                colorSet.push(new THREE.Color(c));
+            }
+
+            const toRemove = [];
+            const radius = 3.0;
+            boardGroup.children.forEach(brick => {
+                const dx = brick.position.x - centerX;
+                const dy = brick.position.y - centerY;
+                if (Math.sqrt(dx*dx + dy*dy) < radius) {
+                    toRemove.push(brick);
+                }
+            });
+
+            let spawned = 0;
+            const piecesPerBrick = 30 + Math.floor(Math.random() * 35);
+            for (const brick of toRemove) {
+                const pos = brick.position.clone();
+                for (let i = 0; i < piecesPerBrick && spawned < MAX_DEBRIS; i++) {
+                    let p = null;
+                    for (let j = 0; j < MAX_DEBRIS; j++) {
+                        if (!debrisData[j].active) { p = debrisData[j]; break; }
+                    }
+                    if (!p) break;
+                    p.active = true;
+                    p.maxLife = p.life = 0.9 + Math.random() * 1.1;
+                    const dir = new THREE.Vector3(
+                        (pos.x - centerX) * 1.5 + (Math.random() - 0.5) * 2.0,
+                        Math.random() * 4.0 + 1.5,
+                        (Math.random() - 0.5) * 4.0
+                    ).normalize();
+                    const speed = 5 + Math.random() * 12;
+                    p.vel.copy(dir).multiplyScalar(speed);
+                    p.vel.y += 3 + Math.random() * 5;
+                    p.pos.copy(pos);
+                    p.pos.x += (Math.random() - 0.5) * 1.0;
+                    p.pos.y += (Math.random() - 0.5) * 0.8;
+                    p.pos.z += (Math.random() - 0.5) * 1.0;
+                    p.scale = 0.3 + Math.random() * 1.6;
+                    p.geoType = Math.floor(Math.random() * fragmentGeos.length);
+                    p.rotSpeed.set(
+                        (Math.random() - 0.5) * 25,
+                        (Math.random() - 0.5) * 25,
+                        (Math.random() - 0.5) * 25
+                    );
+                    p.rot.set(
+                        Math.random() * Math.PI * 2,
+                        Math.random() * Math.PI * 2,
+                        Math.random() * Math.PI * 2
+                    );
+                    const srcColor = colorSet[Math.floor(Math.random() * colorSet.length)];
+                    const hsl = {};
+                    srcColor.getHSL(hsl);
+                    const c = new THREE.Color().setHSL(
+                        hsl.h + (Math.random() - 0.5) * 0.05,
+                        Math.max(0.3, Math.min(0.9, hsl.s + (Math.random() - 0.5) * 0.3)),
+                        Math.max(0.25, Math.min(0.8, hsl.l + (Math.random() - 0.5) * 0.3))
+                    );
+                    p.color = c.getHex();
+                    spawned++;
+                }
+                spawnDust(pos, 50, 2.0, 4.0);
+            }
+
+            const colors = debrisMesh.instanceColor.array;
+            for (let i = 0; i < MAX_DEBRIS; i++) {
+                if (debrisData[i].active) {
+                    const c = new THREE.Color(debrisData[i].color);
+                    colors[i*3] = c.r;
+                    colors[i*3+1] = c.g;
+                    colors[i*3+2] = c.b;
+                }
+            }
+            debrisMesh.instanceColor.needsUpdate = true;
+            dustPoints.geometry.attributes.position.needsUpdate = true;
+            dustPoints.geometry.attributes.size.needsUpdate = true;
+
+            toRemove.forEach(b => {
+                boardGroup.remove(b);
+                if (b.geometry) b.geometry.dispose();
+                if (b.material) b.material.dispose();
+            });
+        }
+
+        function triggerLineShatter(row, rowColors) {
+            hitstop = 2;
+            
+            for (let w = 0; w < 3; w++) {
+                setTimeout(() => {
+                    for (const ring of shockRings) {
+                        if (!ring.visible) {
+                            ring.visible = true;
+                            ring.userData.life = ring.userData.maxLife = 0.5;
+                            ring.position.set(
+                                COLS/2-0.5 + (Math.random()-0.5) * 2,
+                                row + (Math.random()-0.5) * 1.5,
+                                0.15
+                            );
+                            ring.scale.set(0.04, 0.04, 0.04);
+                            ring.material.opacity = 0.8;
+                            ring.material.color.setHSL(0.08 + Math.random()*0.1, 0.7, 0.7);
+                            break;
+                        }
+                    }
+                }, w * 60);
+            }
+
+            const colorSet = [];
+            if (rowColors && rowColors.length > 0) {
+                rowColors.forEach(c => colorSet.push(new THREE.Color(c)));
+            }
+            while (colorSet.length < 3) {
+                const c = COLORS[Math.floor(Math.random() * COLORS.length) + 1] || 0xff4757;
+                colorSet.push(new THREE.Color(c));
+            }
+
+            const toRemove = [];
+            boardGroup.children.forEach(brick => {
+                if (Math.abs(brick.position.y - row) < 0.5) {
+                    toRemove.push(brick);
+                }
+            });
+
+            let spawned = 0;
+            for (const brick of toRemove) {
+                const pos = brick.position.clone();
+                const pieces = 20 + Math.floor(Math.random() * 28);
+                for (let i = 0; i < pieces && spawned < MAX_DEBRIS; i++) {
+                    let p = null;
+                    for (let j = 0; j < MAX_DEBRIS; j++) {
+                        if (!debrisData[j].active) { p = debrisData[j]; break; }
+                    }
+                    if (!p) break;
+                    p.active = true;
+                    p.maxLife = p.life = 0.8 + Math.random() * 1.0;
+                    const rowCenter = COLS / 2 - 0.5;
+                    const dir = new THREE.Vector3(
+                        (pos.x - rowCenter) * 0.7 + (Math.random() - 0.5) * 1.5,
+                        Math.random() * 2.5 + 0.5,
+                        (Math.random() - 0.5) * 3.0
+                    ).normalize();
+                    const speed = 3 + Math.random() * 7;
+                    p.vel.copy(dir).multiplyScalar(speed);
+                    p.vel.y += 2 + Math.random() * 3;
+                    p.pos.copy(pos);
+                    p.pos.x += (Math.random() - 0.5) * 0.7;
+                    p.pos.y += (Math.random() - 0.5) * 0.5;
+                    p.pos.z += (Math.random() - 0.5) * 0.7;
+                    p.scale = 0.3 + Math.random() * 1.4;
+                    p.geoType = Math.floor(Math.random() * fragmentGeos.length);
+                    p.rotSpeed.set(
+                        (Math.random() - 0.5) * 18,
+                        (Math.random() - 0.5) * 18,
+                        (Math.random() - 0.5) * 18
+                    );
+                    p.rot.set(
+                        Math.random() * Math.PI * 2,
+                        Math.random() * Math.PI * 2,
+                        Math.random() * Math.PI * 2
+                    );
+                    const srcColor = colorSet[Math.floor(Math.random() * colorSet.length)];
+                    const hsl = {};
+                    srcColor.getHSL(hsl);
+                    const c = new THREE.Color().setHSL(
+                        hsl.h + (Math.random() - 0.5) * 0.04,
+                        Math.max(0.3, Math.min(0.8, hsl.s + (Math.random() - 0.5) * 0.2)),
+                        Math.max(0.25, Math.min(0.7, hsl.l + (Math.random() - 0.5) * 0.25))
+                    );
+                    p.color = c.getHex();
+                    spawned++;
+                }
+                spawnDust(pos, 30, 1.2, 2.5);
+            }
+
+            const colors = debrisMesh.instanceColor.array;
+            for (let i = 0; i < MAX_DEBRIS; i++) {
+                if (debrisData[i].active) {
+                    const c = new THREE.Color(debrisData[i].color);
+                    colors[i*3] = c.r;
+                    colors[i*3+1] = c.g;
+                    colors[i*3+2] = c.b;
+                }
+            }
+            debrisMesh.instanceColor.needsUpdate = true;
+            dustPoints.geometry.attributes.position.needsUpdate = true;
+            dustPoints.geometry.attributes.size.needsUpdate = true;
+
+            toRemove.forEach(b => {
+                boardGroup.remove(b);
+                if (b.geometry) b.geometry.dispose();
+                if (b.material) b.material.dispose();
+            });
+        }
+
+        function updateShatter(dt) {
+            const obj = new THREE.Object3D();
+            let needsMatrixUpdate = false;
+            
+            for (let i = 0; i < MAX_DEBRIS; i++) {
+                const p = debrisData[i];
+                if (!p.active) continue;
+                p.life -= dt;
+                if (p.life <= 0) {
+                    p.active = false;
+                    obj.scale.set(0, 0, 0);
+                    obj.updateMatrix();
+                    debrisMesh.setMatrixAt(i, obj.matrix);
+                    needsMatrixUpdate = true;
+                    continue;
+                }
+                p.vel.y -= 18 * dt;
+                p.vel.multiplyScalar(1 - 0.7 * dt);
+                p.pos.addScaledVector(p.vel, dt);
+                p.rot.x += p.rotSpeed.x * dt;
+                p.rot.y += p.rotSpeed.y * dt;
+                p.rot.z += p.rotSpeed.z * dt;
+                const t = p.life / p.maxLife;
+                let s = p.scale;
+                if (t < 0.15) s *= t / 0.15;
+                if (p.pos.y < -0.2) {
+                    p.pos.y = -0.2;
+                    p.vel.y *= -0.25;
+                    p.vel.x *= 0.85;
+                    p.vel.z *= 0.85;
+                    if (Math.abs(p.vel.y) < 0.5) p.vel.y = 0;
+                }
+                obj.position.copy(p.pos);
+                obj.rotation.copy(p.rot);
+                obj.scale.set(s, s, s);
+                obj.updateMatrix();
+                debrisMesh.setMatrixAt(i, obj.matrix);
+                needsMatrixUpdate = true;
+            }
+            if (needsMatrixUpdate) {
+                debrisMesh.instanceMatrix.needsUpdate = true;
+            }
+
+            shockRings.forEach(ring => {
+                if (!ring.visible) return;
+                ring.userData.life -= dt;
+                if (ring.userData.life <= 0) {
+                    ring.visible = false;
+                    return;
+                }
+                const t = ring.userData.life / ring.userData.maxLife;
+                const s = 12 * (1 - t * t);
+                ring.scale.set(s, s, 1);
+                ring.material.opacity = t * 0.6;
+            });
+
+            let dustCount = 0;
+            for (let i = 0; i < dustActiveCount; i++) {
+                dustLifetimes[i] -= dt;
+                if (dustLifetimes[i] <= 0) continue;
+                dustCount++;
+                dustPositions[i*3] += dustVelocities[i].x * dt;
+                dustPositions[i*3+1] += dustVelocities[i].y * dt - 0.2 * dt;
+                dustPositions[i*3+2] += dustVelocities[i].z * dt;
+                dustVelocities[i].multiplyScalar(0.97);
+                const lifeRatio = Math.max(0, dustLifetimes[i] / 2.5);
+                dustSizes[i] = (0.03 + Math.random() * 0.02) * Math.min(1, lifeRatio * 2);
+            }
+            dustActiveCount = dustCount;
+            if (dustPoints.geometry.attributes.position) {
+                dustPoints.geometry.attributes.position.needsUpdate = true;
+                dustPoints.geometry.attributes.size.needsUpdate = true;
+            }
+            if (dustPoints.material) {
+                dustPoints.material.opacity = Math.min(0.4, dustActiveCount / 150);
+            }
+            updateFlashSprites(dt);
+        }
+
+        function clearShatter() {
+            const dummy = new THREE.Object3D();
+            dummy.scale.set(0, 0, 0);
+            dummy.updateMatrix();
+            for (let i = 0; i < MAX_DEBRIS; i++) {
+                debrisData[i].active = false;
+                debrisMesh.setMatrixAt(i, dummy.matrix);
+            }
+            debrisMesh.instanceMatrix.needsUpdate = true;
+            for (let i = 0; i < DUST_COUNT; i++) {
+                dustPositions[i*3+1] = -100;
+            }
+            dustActiveCount = 0;
+            dustPoints.geometry.attributes.position.needsUpdate = true;
+            for (const sprite of flashSprites) {
+                sprite.visible = false;
+                sprite.material.opacity = 0;
+            }
+        }
+
+        // ========== ★ 炸弹引爆按钮控制 ==========
+        function updateBombButton() {
+            const btn = document.getElementById('bomb-btn');
+            if (currentPiece && currentPiece.color === 8 && !isGameOver && !isPaused) {
+                btn.style.display = 'block';
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+
+        // ========== 游戏核心 ==========
+        function init() {
+            loadHighScore();
+            scene = new THREE.Scene(); 
+            scene.background = new THREE.Color(0x0a0a12);
+            scene.fog = new THREE.FogExp2(0x0a0a12, 0.003);
+            
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 200);
+            
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true, 
+                powerPreference: "high-performance" 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true; 
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping; 
+            renderer.toneMappingExposure = 1.2;
+            renderer.shadowMap.bias = 0.0001;
+            document.body.appendChild(renderer.domElement);
+
+            setupLighting();
+            
+            flashLight = new THREE.PointLight(0xffffff, 0, 50);
+            flashLight.position.set(COLS/2-0.5, ROWS/2, 10); 
+            scene.add(flashLight);
+
+            composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            composer.addPass(new UnrealBloomPass(
+                new THREE.Vector2(window.innerWidth, window.innerHeight), 
+                0.25, 0.05, 0.5
+            ));
+            const fxaa = new ShaderPass(FXAAShader);
+            fxaa.uniforms['resolution'].value.set(1/window.innerWidth, 1/window.innerHeight);
+            composer.addPass(fxaa);
+
+            boardGroup = new THREE.Group(); 
+            activeGroup = new THREE.Group(); 
+            scene.add(boardGroup, activeGroup);
+            
+            createBackground(); 
+            createMechFrame();   // ★ 流光边框
+            createPreviewPanel(); 
+            initShatterSystem();
+            
+            baseCamTarget.set(COLS/2-0.5, ROWS/2-1.0, 0);
+            baseCamPos.set(COLS/2-0.5, ROWS/2-1.0+CAM_HEIGHT_OFFSET, CAM_DISTANCE);
+            camera.position.copy(baseCamPos); 
+            camera.lookAt(baseCamTarget);
+            
+            onResize();
+            window.addEventListener('resize', onResize);
+            document.addEventListener('keydown', onKey);
+            setupGestures();
+
+            document.getElementById('restart-btn').addEventListener('touchend', e => { 
+                e.preventDefault(); e.stopPropagation(); resetGame(); 
+            });
+            document.getElementById('restart-btn').addEventListener('click', e => { 
+                e.preventDefault(); e.stopPropagation(); resetGame(); 
+            });
+
+            // ★★★ 炸弹引爆按钮修复（同时支持点击和触摸） ★★★
+            const bombBtn = document.getElementById('bomb-btn');
+
+            function triggerBombExplode() {
+                if (currentPiece && currentPiece.color === 8 && !isGameOver && !isPaused) {
+                    const bombShape = currentPiece.shape;
+                    const bombX = currentPiece.x;
+                    const bombY = currentPiece.y;
+                    for (let r = 0; r < bombShape.length; r++) {
+                        for (let c = 0; c < bombShape[r].length; c++) {
+                            if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
+                                board[bombY + r][bombX + c] = 8;
+                            }
+                        }
+                    }
+                    while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
+                    bombExplosion(bombX, bombY, bombShape);
+                    spawnPiece();
+                }
+            }
+
+            // 同时支持 click 和 touchstart
+            bombBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                triggerBombExplode();
+            });
+
+            bombBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();   // 防止触发页面滚动
+                e.stopPropagation();
+                triggerBombExplode();
+            }, { passive: false });
+        }
+
+        function createBackground() {
+            const c = document.createElement('canvas'); 
+            c.width = 512; c.height = 512;
+            const ctx = c.getContext('2d');
+            const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+            gradient.addColorStop(0, '#16162a');
+            gradient.addColorStop(1, '#0a0a12');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 512);
+            ctx.strokeStyle = 'rgba(30,30,60,0.3)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 512; i += 32) {
+                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+            }
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = tex.wrapT = THREE.RepeatWrapping; 
+            tex.repeat.set(8, 8);
+            const bg = new THREE.Mesh(
+                new THREE.PlaneGeometry(60, 80), 
+                new THREE.MeshStandardMaterial({ map: tex, color: 0x0e0e18 })
+            );
+            bg.position.set(COLS/2-0.5, ROWS/2-0.5, -1); 
+            scene.add(bg);
+        }
+
+        // ★★★ 流光边框（每个LED增加 userData.isFlashing 用于闪光控制） ★★★
+function createMechFrame() {
+    // ★ 超简单材质，避免光照干扰视觉
+    const armorMat = new THREE.MeshStandardMaterial({
+        color: 0x2a2a35,
+        roughness: 0.7,
+        metalness: 0.6,
+    });
+    const ledMat = new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        emissive: 0xff8800,
+        emissiveIntensity: 2.0,
+        roughness: 0.1,
+        metalness: 0.0
+    });
+    
+    // ★ 边框参数——绝对对称
+    const FRAME_W = 0.3;        // 边框宽度
+    const FRAME_D = 0.6;        // 边框深度
+    const FRAME_OUTSET = -0.08;   // 外扩距离
+    const GAME_LEFT = -0.5;
+    const GAME_RIGHT = 9.5;
+    const GAME_BOTTOM = -0.5;
+    const GAME_TOP = 19.5;
+
+    // ---- ★ 左右边框（BoxGeometry，绝对垂直） ----
+    const leftX = GAME_LEFT - FRAME_W/2 - FRAME_OUTSET;
+    const rightX = GAME_RIGHT + FRAME_W/2 + FRAME_OUTSET;
+    const frameHeight = ROWS + 0.8;  // 20.8
+    const frameCenterY = (GAME_TOP + GAME_BOTTOM) / 2; // 9.5
+
+    // 左边框
+    const leftArmor = new THREE.Mesh(
+        new THREE.BoxGeometry(FRAME_W, frameHeight, FRAME_D),
+        armorMat
+    );
+    leftArmor.position.set(leftX, frameCenterY, 0);
+    leftArmor.castShadow = true;
+    leftArmor.receiveShadow = true;
+    scene.add(leftArmor);
+
+    // 右边框
+    const rightArmor = new THREE.Mesh(
+        new THREE.BoxGeometry(FRAME_W, frameHeight, FRAME_D),
+        armorMat
+    );
+    rightArmor.position.set(rightX, frameCenterY, 0);
+    rightArmor.castShadow = true;
+    rightArmor.receiveShadow = true;
+    scene.add(rightArmor);
+
+    // ---- ★ 左右LED流光条 ----
+    const ledHeight = ROWS + 0.4;
+    const leftLed = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.06, ledHeight),
+        ledMat.clone()
+    );
+    leftLed.position.set(GAME_LEFT - FRAME_OUTSET, frameCenterY, FRAME_D/2 + 0.01);
+    leftLed.material.emissiveIntensity = 3.0;
+    leftLed.userData = { isFlashing: false };
+    scene.add(leftLed);
+    frameLedStrips.push(leftLed);
+
+    const rightLed = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.06, ledHeight),
+        ledMat.clone()
+    );
+    rightLed.position.set(GAME_RIGHT + FRAME_OUTSET, frameCenterY, FRAME_D/2 + 0.01);
+    rightLed.material.emissiveIntensity = 3.0;
+    rightLed.userData = { isFlashing: false };
+    scene.add(rightLed);
+    frameLedStrips.push(rightLed);
+
+    // ---- ★ 底部边框 ----
+    const bottomWidth = GAME_RIGHT - GAME_LEFT + FRAME_OUTSET * 2 + FRAME_W;
+    const bottomArmor = new THREE.Mesh(
+        new THREE.BoxGeometry(bottomWidth, FRAME_W, FRAME_D),
+        armorMat
+    );
+    bottomArmor.position.set((GAME_LEFT + GAME_RIGHT) / 2, GAME_BOTTOM - FRAME_W/2, 0);
+    bottomArmor.castShadow = true;
+    bottomArmor.receiveShadow = true;
+    scene.add(bottomArmor);
+
+    // 底部LED条
+    const bottomLed = new THREE.Mesh(
+        new THREE.PlaneGeometry(bottomWidth - 0.4, 0.05),
+        ledMat.clone()
+    );
+    bottomLed.position.set((GAME_LEFT + GAME_RIGHT) / 2, GAME_BOTTOM - 0.1, FRAME_D/2 + 0.01);
+    bottomLed.material.emissiveIntensity = 2.5;
+    bottomLed.userData = { isFlashing: false };
+    scene.add(bottomLed);
+    frameLedStrips.push(bottomLed);
+}
+
+        function createPreviewPanel() {
+            previewGroup = new THREE.Group(); 
+            previewGroup.position.set(COLS/2 - 0.5, ROWS - 2.8, 2.0);
+            previewGroup.scale.set(0.38, 0.38, 0.38);
+            scene.add(previewGroup);
+            
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: 0x1a1a28, roughness: 0.7, metalness: 0.3,
+            });
+            const PW = 5, PH = 5, B = 0.3, D = 0.4;
+            function bar(w, h, x, y) { 
+                const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, D), mat); 
+                m.position.set(x, y, 0); 
+                previewGroup.add(m); 
+            }
+            bar(PW, B, 0, PH/2); 
+            bar(PW, B, 0, -PH/2); 
+            bar(B, PH, -PW/2, 0); 
+            bar(B, PH, PW/2, 0);
+            
+            const ledW = 0.07;
+            const miniLedMat = new THREE.MeshStandardMaterial({
+                color: 0x000000,
+                emissive: 0xff8800,
+                emissiveIntensity: 2.0,
+                roughness: 0.1,
+                metalness: 0.0
+            });
+            const addMiniLed = (w, h, x, y) => {
+                const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), miniLedMat.clone());
+                m.position.set(x, y, D/2 + 0.01);
+                previewGroup.add(m);
+                previewLedStrips.push(m);
+            };
+            addMiniLed(PW - B*2 - 0.2, ledW, 0, PH/2 - B - 0.05);
+            addMiniLed(PW - B*2 - 0.2, ledW, 0, -PH/2 + B + 0.05);
+            addMiniLed(ledW, PH - B*2 - 0.2, -PW/2 + B + 0.05, 0);
+            addMiniLed(ledW, PH - B*2 - 0.2, PW/2 - B - 0.05, 0);
+        }
+
+        function updatePreview() {
+            const toRemove = []; 
+            previewGroup.children.forEach(c => { 
+                if (c.userData?.isPreviewBlock) toRemove.push(c); 
+            });
+            toRemove.forEach(c => { 
+                previewGroup.remove(c); 
+                if (c.geometry) c.geometry.dispose(); 
+                if (c.material) c.material.dispose(); 
+            });
+            if (nextPieceType < 1 || nextPieceType > 7) return;
+            
+            const shape = SHAPES[nextPieceType], color = COLORS[nextPieceType];
+            const rows = shape.length, cols = shape[0].length;
+            const blockSize = 0.55;
+            const ox = -(cols - 1) / 2 * blockSize;
+            const oy = -(rows - 1) / 2 * blockSize;
+            const geo = new RoundedBoxGeometry(blockSize*0.9, blockSize*0.9, blockSize*0.9, 3, 0.1);
+            
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (!shape[r][c]) continue;
+                    const mat = new THREE.MeshPhysicalMaterial({
+                        color, roughness: 0.15, metalness: 0.02,
+                        clearcoat: 0.3, clearcoatRoughness: 0.2,
+                        emissive: color, emissiveIntensity: 0.15
+                    });
+                    const mesh = new THREE.Mesh(geo, mat);
+                    mesh.position.set(ox + c * blockSize, oy + r * blockSize, 0);
+                    mesh.userData = { isPreviewBlock: true }; 
+                    previewGroup.add(mesh);
+                }
+            }
+            previewGroup.lookAt(camera.position);
+        }
+
+        function createBoard() {
+            board = Array.from({ length: ROWS }, () => Array(COLS).fill(0)); 
+            while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
+        }
+        const blockGeo = new RoundedBoxGeometry(0.92, 0.92, 0.92, 4, 0.12);
+
+        function addBlock(x, y, ci, g = boardGroup, gridR = 0, gridC = 0) {
+            const isBomb = (ci === 8);
+            let color;
+            if (isBomb) {
+                const hue = ((gridR * 3 + gridC * 7) % 6) / 6;
+                color = new THREE.Color().setHSL(hue, 1.0, 0.5);
+            } else {
+                color = new THREE.Color(COLORS[ci] || 0xffffff);
+            }
+            const mat = new THREE.MeshPhysicalMaterial({
+                color: color,
+                roughness: 0.35,
+                metalness: 0.02,
+                clearcoat: 0.15,
+                clearcoatRoughness: 0.25,
+                emissive: color,
+                emissiveIntensity: 0.08,
+            });
+            const mesh = new THREE.Mesh(blockGeo, mat);
+            mesh.position.set(x, y, 0);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.userData.color = ci;
+            mesh.userData.gridPos = { r: gridR, c: gridC };
+            if (isBomb) mesh.userData.isBomb = true;
+            g.add(mesh);
+        }
+
+        function spawnPiece() {
+            if (nextPieceType === 0) nextPieceType = Math.floor(Math.random() * 7) + 1;
+            const t = nextPieceType;
+            nextPieceType = Math.floor(Math.random() * 7) + 1;
+            const colorIndex = Math.random() < 0.1 ? 8 : t;
+            updatePreview();
+            currentPiece = {
+                shape: SHAPES[t].map(r => [...r]),
+                x: Math.floor(COLS/2) - Math.floor(SHAPES[t][0].length/2),
+                y: ROWS - SHAPES[t].length,
+                color: colorIndex
+            };
+            if (checkCollision(currentPiece.shape, currentPiece.x, currentPiece.y)) {
+                isGameOver = true;
+                document.getElementById('final-score').innerText = 'FINAL SCORE: ' + score;
+                document.getElementById('gameover-overlay').style.display = 'flex';
+                return;
+            }
+            renderActive();
+            updateBombButton();
+        }
+
+        function renderActive() {
+            while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
+            const { shape, x, y, color } = currentPiece;
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c]) addBlock(x+c, y+r, color, activeGroup, r, c);
+                }
+            }
+        }
+
+        function checkCollision(s, px, py) {
+            for (let r = 0; r < s.length; r++) {
+                for (let c = 0; c < s[r].length; c++) {
+                    if (!s[r][c]) continue;
+                    const nx = px + c, ny = py + r;
+                    if (nx < 0 || nx >= COLS || ny < 0) return true;
+                    if (ny < ROWS && board[ny][nx] !== 0) return true;
+                }
+            }
+            return false;
+        }
+
+        function lock() {
+            if (isLocking) return;
+            isLocking = true;
+            
+            const { shape, x, y, color } = currentPiece;
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c] && y + r < ROWS && y + r >= 0) {
+                        board[y + r][x + c] = color;
+                        addBlock(x + c, y + r, color, boardGroup, r, c);
+                    }
+                }
+            }
+            if (color === 8) bombExplosion(x, y, shape);
+            
+            // ★ 计算触发方块的中心位置（用于消除特效）
+            const rows = shape.length;
+            const cols = shape[0].length;
+            const triggerX = x + cols / 2 - 0.5;
+            const triggerY = y + rows / 2 - 0.5;
+            
+            clearLines(triggerX, triggerY);  // ← 传入位置
+            
+            spawnPiece();
+            isLocking = false;
+            updateBombButton();
+        }
+
+        function bombExplosion(px, py, shape) {
+            const colors = [];
+            const centerX = px + 1;
+            const centerY = py + 1;
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (!shape[r][c]) continue;
+                    const cx = px + c, cy = py + r;
+                    for (let dx = -2; dx <= 2; dx++) {
+                        for (let dy = -2; dy <= 2; dy++) {
+                            const nx = cx + dx, ny = cy + dy;
+                            if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                                if (board[ny][nx] !== 0) {
+                                    colors.push(COLORS[board[ny][nx]] || 0xff4757);
+                                }
+                                board[ny][nx] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+            if (colors.length > 0 || true) {
+                const allColors = colors.length > 0 ? colors : [0xff4757, 0x2ed573, 0x1e90ff, 0xffa502, 0xa55eea];
+                triggerBombShatter(centerY, allColors, centerX, centerY);
+            }
+            while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c] !== 0) {
+                        addBlock(c, r, board[r][c], boardGroup, r, c);
+                    }
+                }
+            }
+            flashLight.intensity = 40;
+            flashLight.color.setHex(0xff00ff);
+            flashLight.position.set(centerX, centerY, 2);
+            updateBombButton();
+        }
+
+        function hardDrop() {
+            if (!currentPiece || isGameOver || isPaused || isLocking) return;
+            while (!checkCollision(currentPiece.shape, currentPiece.x, currentPiece.y - 1)) currentPiece.y--;
+            lock();
+            lastDrop = performance.now();
+        }
+
+        // ★★★ 整行消除 + 边框闪光 ★★★
+        function clearLines(triggerX, triggerY) {
+            const fullRows = [];
+            for (let r = 0; r < ROWS; r++) {
+                if (board[r].every(c => c !== 0)) fullRows.push(r);
+            }
+            if (!fullRows.length) return;
+            
+            // ★ 边框闪光：所有边框LED变为白色高亮
+            frameLedStrips.forEach(led => {
+                if (!led.userData) led.userData = {};
+                led.userData.isFlashing = true;
+                led.material.emissive.setHex(0xffffff);
+                led.material.emissiveIntensity = 12.0;
+            });
+            setTimeout(() => {
+                frameLedStrips.forEach(led => {
+                    if (led.userData) led.userData.isFlashing = false;
+                });
+            }, 280);  // 稍长一点，与爆炸同步
+            
+            // ★ 在触发方块位置产生爆炸闪光
+            const flashPos = new THREE.Vector3(triggerX, triggerY, 0);
+            triggerFlash(flashPos, 1.2);
+            flashEl.classList.add('active');
+            setTimeout(() => flashEl.classList.remove('active'), 80);
+            
+            // 点光源爆发
+            pointLightBurst.intensity = 30;
+            pointLightBurst.color.setHSL(0.08, 0.9, 0.7);
+            pointLightBurst.position.set(triggerX, triggerY, 2);
+            setTimeout(() => { pointLightBurst.intensity = 0; }, 400);
+            
+            // 震动加强
+            addShake(1.5, 0.4, 12, 'punch');
+            addShake(0.5, 0.25, 45, 'exponential');
+            addShake(0.2, 0.6, 5, 'linear');
+            
+            flashLight.intensity = 25 * fullRows.length;
+            flashLight.color.setHex(0xffcc00);
+            flashLight.position.set(triggerX, triggerY, 2);
+            
+            // 行消除碎片
+            fullRows.forEach((row, idx) => {
+                const rowColors = [];
+                for (let c = 0; c < COLS; c++) {
+                    if (board[row][c] !== 0) rowColors.push(COLORS[board[row][c]]);
+                }
+                setTimeout(() => {
+                    triggerLineShatter(row, rowColors);
+                }, idx * 100);
+            });
+
+            const el = document.getElementById('score');
+            el.classList.add('score-bump');
+            setTimeout(() => el.classList.remove('score-bump'), 200);
+            
+            fullRows.sort((a, b) => b - a).forEach(r => {
+                board.splice(r, 1);
+                board.push(Array(COLS).fill(0));
+            });
+            
+            setTimeout(() => {
+                while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (board[r][c] !== 0) addBlock(c, r, board[r][c], boardGroup, r, c);
+                    }
+                }
+            }, 200);
+            
+            score += [0, 100, 300, 500, 800][fullRows.length] || 800;
+            if (score > highScore) { highScore = score; saveHighScore(); }
+            document.getElementById('score').innerText = score;
+            
+            // 速度控制：4800分时达到最快（80ms）
+            if (score >= 4800) {
+                dropInterval = 200;
+            } else {
+                dropInterval = Math.max(80, 800 - score / 8);
+            }
+            updateBombButton();
+        }
+
+        // ========== ★ 键盘事件（含I块专用踢墙 + E键引爆炸弹） ==========
+        function onKey(e) {
+            if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+                if (isGameOver) return;
+                isPaused = !isPaused;
+                document.getElementById('pause-indicator').style.display = isPaused ? 'block' : 'none';
+                if (isPaused) document.getElementById('bomb-btn').style.display = 'none';
+                else updateBombButton();
+                return;
+            }
+            // ★ 炸弹主动引爆：按 E 键
+            if (e.key === 'e' || e.key === 'E') {
+                if (isGameOver || isPaused || !currentPiece) return;
+                if (currentPiece.color === 8) {
+                    const bombShape = currentPiece.shape;
+                    const bombX = currentPiece.x;
+                    const bombY = currentPiece.y;
+                    for (let r = 0; r < bombShape.length; r++) {
+                        for (let c = 0; c < bombShape[r].length; c++) {
+                            if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
+                                board[bombY + r][bombX + c] = 8;
+                            }
+                        }
+                    }
+                    while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
+                    bombExplosion(bombX, bombY, bombShape);
+                    spawnPiece();
+                }
+                return;
+            }
+            if (isGameOver || isPaused || !currentPiece || isLocking) return;
+            if (e.key === ' ' || e.key === 'Space') {
+                e.preventDefault();
+                hardDrop();
+                return;
+            }
+            const { shape, x, y } = currentPiece;
+            switch (e.key) {
+                case 'ArrowLeft':
+                    if (!checkCollision(shape, x - 1, y)) { currentPiece.x--; renderActive(); }
+                    break;
+                case 'ArrowRight':
+                    if (!checkCollision(shape, x + 1, y)) { currentPiece.x++; renderActive(); }
+                    break;
+                case 'ArrowDown':
+                    if (!checkCollision(shape, x, y - 1)) { currentPiece.y--; renderActive(); } else lock();
+                    break;
+                case 'ArrowUp': {
+                    const rot = shape[0].map((_, i) => shape.map(r => r[i]).reverse());
+                    const isI = shape.length === 1 || shape[0].length === 1;
+                    
+                    // ★ I块专用踢墙表 - 扩大偏移范围（解决右边缘旋转问题）
+                    const iKicks = [
+                        [0, 0],      // 原位
+                        [-1, 0], [1, 0],   // 左右1格
+                        [-2, 0], [2, 0],   // 左右2格
+                        [-3, 0], [3, 0],   // 左右3格
+                        [-4, 0], [4, 0],   // 左右4格
+                        [0, -1], [-1, -1], [1, -1],
+                        [0, 1], [-1, 1], [1, 1],
+                        [-2, -1], [2, -1], [-2, 1], [2, 1],
+                        [-3, -1], [3, -1], [-3, 1], [3, 1],
+                    ];
+                    
+                    const normalKicks = [
+                        [0, 0], [-1, 0], [1, 0], [0, -1], [-1, -1], [1, -1], [0, 1], [-1, 1], [1, 1]
+                    ];
+                    
+                    const kicks = isI ? iKicks : normalKicks;
+                    
+                    for (const [dx, dy] of kicks) {
+                        if (!checkCollision(rot, x + dx, y + dy)) {
+                            currentPiece.shape = rot;
+                            currentPiece.x += dx;
+                            currentPiece.y += dy;
+                            renderActive();
+                            return;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+function onResize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const aspect = w / h;
+    camera.aspect = aspect;
+    const ba = COLS / (ROWS + 2);
+    let fov = aspect > ba ? 
+        2 * Math.atan((ROWS + 2) / (2 * CAM_DISTANCE)) * (180 / Math.PI) : 
+        2 * Math.atan(COLS / (2 * CAM_DISTANCE * aspect)) * (180 / Math.PI);
+    fov = Math.max(30, Math.min(fov, 62));
+    camera.fov = fov; 
+    camera.updateProjectionMatrix();
+    baseCamTarget.set(COLS/2-0.5, ROWS/2-1.0, 0);
+    baseCamPos.set(COLS/2-0.5, ROWS/2-1.0+CAM_HEIGHT_OFFSET, CAM_DISTANCE);
+    camera.position.copy(baseCamPos); 
+    camera.lookAt(baseCamTarget);
+    
+    // 预览框 NDC 定位（保持不变）
+    if (previewGroup) {
+        let scale, ndcX, ndcY;
+        if (aspect < 0.6) {
+            scale = 0.50;
+            ndcX = 0.72;
+            ndcY = 0.52;
+        } else if (aspect < 0.8) {
+            scale = 0.52;
+            ndcX = 0.74;
+            ndcY = 0.53;
+        } else if (aspect < 1.2) {
+            scale = 0.55;
+            ndcX = 0.76;
+            ndcY = 0.55;
+        } else {
+            scale = 0.58;
+            ndcX = 0.78;
+            ndcY = 0.57;
+        }
+        const ndcPos = new THREE.Vector3(ndcX, ndcY, 0.5);
+        ndcPos.unproject(camera);
+        const dir = ndcPos.sub(camera.position).normalize();
+        const t = -camera.position.z / dir.z;
+        const worldPos = camera.position.clone().add(dir.multiplyScalar(t));
+        previewGroup.position.set(worldPos.x - 0.5, worldPos.y - 0.5, 0);
+        previewGroup.scale.set(scale, scale, scale);
+        previewGroup.lookAt(camera.position);
+    }
+    
+    // ★★★ 竖屏时调整边框位置，避免被裁剪和透视畸变 ★★★
+    if (window._frameParts) {
+        const GAME_LEFT = -0.5;
+        const GAME_RIGHT = 9.5;
+        const FRAME_W = 0.25;
+        let offset;
+        if (aspect < 0.6) {
+            offset = 0.25;  // 超窄竖屏，边框大幅内收
+        } else if (aspect < 0.8) {
+            offset = 0.20;  // 普通竖屏，适度内收
+        } else {
+            offset = 0.15;  // 横屏/正方形，正常外扩
+        }
+        window._frameParts.leftArmor.position.x = GAME_LEFT - FRAME_W/2 - offset;
+        window._frameParts.rightArmor.position.x = GAME_RIGHT + FRAME_W/2 + offset;
+        window._frameParts.leftLed.position.x = GAME_LEFT - offset;
+        window._frameParts.rightLed.position.x = GAME_RIGHT + offset;
+        // 底部边框同步微调
+        const bottomWidth = GAME_RIGHT - GAME_LEFT + offset * 2 + FRAME_W;
+        window._frameParts.bottomArmor.scale.x = bottomWidth / (GAME_RIGHT - GAME_LEFT + 0.3 + FRAME_W);
+    }
+    
+    renderer.setSize(w, h); 
+    composer.setSize(w, h);
+}
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const rawDt = Math.min(clock.getDelta(), 0.05);
+            if (isPaused) { composer.render(); return; }
+            updateShatter(rawDt);
+            updateShake(rawDt);
+            if (hitstop > 0) { 
+                hitstop--; 
+                composer.render(); 
+                return; 
+            }
+            const now = performance.now();
+            const effectiveInterval = fastDropActive ? 50 : dropInterval;
+            if (!isGameOver && currentPiece && !isLocking && now - lastDrop > effectiveInterval) {
+                if (!checkCollision(currentPiece.shape, currentPiece.x, currentPiece.y - 1)) {
+                    currentPiece.y--;
+                    renderActive();
+                } else {
+                    lock();
+                }
+                lastDrop = now;
+            }
+            if (!isGameOver && previewGroup) {
+                previewGroup.rotation.y = Math.sin(now * 0.0008) * 0.08;
+                previewGroup.lookAt(camera.position);
+            }
+            
+            // ★ 预览框流光 + 边框流光（跳过正在闪光的LED）
+            if (!isPaused) {
+                const t = now * 0.002;
+                const speed = 1.2;
+                previewLedStrips.forEach((led, i) => {
+                    const phase = (i / previewLedStrips.length) * Math.PI * 2 + t * speed;
+                    const brightness = 0.5 + 0.5 * Math.sin(phase);
+                    const hue = 0.05 + brightness * 0.25;
+                    const color = new THREE.Color().setHSL(hue, 1.0, 0.3 + brightness * 0.5);
+                    led.material.emissive.copy(color);
+                    led.material.emissiveIntensity = 2.0 + brightness * 3.0;
+                });
+                frameLedStrips.forEach((led, i) => {
+                    // ★ 如果正在闪光，跳过流光更新，保持白色高亮
+                    if (led.userData && led.userData.isFlashing) return;
+                    const phase = (i / frameLedStrips.length) * Math.PI * 2 + t * speed;
+                    const brightness = 0.5 + 0.5 * Math.sin(phase);
+                    const hue = 0.05 + brightness * 0.25;
+                    const color = new THREE.Color().setHSL(hue, 1.0, 0.3 + brightness * 0.5);
+                    led.material.emissive.copy(color);
+                    led.material.emissiveIntensity = 2.0 + brightness * 3.0;
+                });
+            }
+            
+            if (flashLight.intensity > 0) {
+                flashLight.intensity *= 0.7;
+                flashLight.color.lerp(new THREE.Color(0xff8800), 0.08);
+            }
+            composer.render();
+        }
+
+        function resetGame() {
+            clearShatter();
+            shakeLayers.length = 0;
+            dropInterval = 800;
+            lastDrop = performance.now();
+            fastDropActive = false;
+            if (fastDropTimer) {
+                clearTimeout(fastDropTimer);
+                fastDropTimer = null;
+            }
+            score = 0; 
+            isGameOver = false; 
+            isPaused = false; 
+            nextPieceType = 0;
+            hitstop = 0;
+            isLocking = false;
+            shakeIntensity = 0;
+            document.getElementById('score').innerText = '0';
+            document.getElementById('gameover-overlay').style.display = 'none';
+            document.getElementById('pause-indicator').style.display = 'none';
+            document.getElementById('bomb-btn').style.display = 'none';
+            // ★ 重置边框闪光状态
+            frameLedStrips.forEach(led => {
+                if (led.userData) led.userData.isFlashing = false;
+            });
+            camera.position.copy(baseCamPos);
+            camera.lookAt(baseCamTarget);
+            createBoard(); 
+            spawnPiece();
+        }
+        window.resetGame = resetGame;
+
+        init(); 
+        createBoard(); 
+        spawnPiece(); 
+        animate();
+    </script>
+</body>
+</html>

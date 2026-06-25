@@ -1,0 +1,8 @@
+{
+  "appId": "com.liuhaigang.tetris3d",
+  "appName": "刘海港Tetris",
+  "webDir": "www",
+  "server": {
+    "allowNavigation": ["tetris3d.html"]
+  }
+}
