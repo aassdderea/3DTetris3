@@ -937,7 +937,7 @@ function init() {
         e.preventDefault(); e.stopPropagation(); resetGame(); 
     });
 
-    // ★★★ 炸弹引爆按钮修复（确保异步操作完成后再生成新方块） ★★★
+    // ★★★ 炸弹引爆按钮最终修复 ★★★
     const bombBtn = document.getElementById('bomb-btn');
     let isExploding = false;
 
@@ -950,49 +950,78 @@ function init() {
         const bombShape = currentPiece.shape;
         const bombX = currentPiece.x;
         const bombY = currentPiece.y;
+        const centerX = bombX + 1;
+        const centerY = bombY + 1;
         
-        // 将炸弹写入 board
+        // 1. 收集炸弹周围砖块颜色并清空 board
+        const colors = [];
         for (let r = 0; r < bombShape.length; r++) {
             for (let c = 0; c < bombShape[r].length; c++) {
-                if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
-                    board[bombY + r][bombX + c] = 8;
+                if (!bombShape[r][c]) continue;
+                const cx = bombX + c;
+                const cy = bombY + r;
+                for (let dx = -2; dx <= 2; dx++) {
+                    for (let dy = -2; dy <= 2; dy++) {
+                        const nx = cx + dx, ny = cy + dy;
+                        if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                            if (board[ny][nx] !== 0) {
+                                colors.push(COLORS[board[ny][nx]] || 0xff4757);
+                            }
+                            board[ny][nx] = 0;
+                        }
+                    }
                 }
             }
         }
         
-        // 清除活动方块
+        // 2. 清除活动方块
         while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
         
-        // 触发爆炸（会清空炸弹周围区域并重建 boardGroup）
-        bombExplosion(bombX, bombY, bombShape);
+        // 3. 触发爆炸特效（直接调用 triggerBombShatter）
+        const allColors = colors.length > 0 ? colors : [0xff4757, 0x2ed573, 0x1e90ff, 0xffa502, 0xa55eea];
+        triggerBombShatter(centerY, allColors, centerX, centerY);
         
-        // 强制清除当前方块引用，避免残留
+        // 4. 强制清理 board 中残留的炸弹数据
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (board[r][c] === 8) board[r][c] = 0;
+            }
+        }
+        
+        // 5. 重建 boardGroup
+        while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (board[r][c] !== 0) addBlock(c, r, board[r][c], boardGroup, r, c);
+            }
+        }
+        
+        // 6. 清除当前方块引用
         currentPiece = null;
         
-        // ★ 关键修复：延迟生成新方块，确保 bombExplosion 中的所有异步操作（setTimeout）完成
-        // 并清理 board 中可能残留的炸弹数据（8）
-        setTimeout(() => {
-            // 清除 board 中所有炸弹数据（8），防止影响新方块生成
+        // 7. 使用 requestAnimationFrame 确保渲染完成后再生成新方块
+        requestAnimationFrame(() => {
+            // 再次清理（安全）
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     if (board[r][c] === 8) board[r][c] = 0;
                 }
             }
-            // 现在生成新方块，board 已干净，不会发生碰撞
             spawnPiece();
-            // 重置防重复标志（确保安全）
-            isExploding = false;
-        }, 100); // 延迟 100ms，足够让所有动画帧和异步移除完成
+            // 延迟重置防重复标志
+            setTimeout(() => {
+                isExploding = false;
+            }, 200);
+        });
     }
 
-    // 只绑定 click（移动端会自己触发 click）
+    // 只使用 click
     bombBtn.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
         triggerBombExplode();
     });
 }
-
 
 
 
