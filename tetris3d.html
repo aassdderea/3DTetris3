@@ -937,7 +937,7 @@ function init() {
         e.preventDefault(); e.stopPropagation(); resetGame(); 
     });
 
-    // ★★★ 炸弹引爆按钮修复（防重复触发） ★★★
+    // ★★★ 炸弹引爆按钮修复（彻底清理残留数据） ★★★
     const bombBtn = document.getElementById('bomb-btn');
     let isExploding = false;
     let explodeTimeout = null;
@@ -949,6 +949,8 @@ function init() {
             const bombShape = currentPiece.shape;
             const bombX = currentPiece.x;
             const bombY = currentPiece.y;
+            
+            // ★ 第一步：将炸弹写入 board
             for (let r = 0; r < bombShape.length; r++) {
                 for (let c = 0; c < bombShape[r].length; c++) {
                     if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
@@ -956,20 +958,36 @@ function init() {
                     }
                 }
             }
+            
+            // ★ 第二步：清除活动方块
             while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
+            
+            // ★ 第三步：触发爆炸（会清理 board 中炸弹周围的数据）
             bombExplosion(bombX, bombY, bombShape);
-            // 强制清除 currentPiece，避免残留
+            
+            // ★ 第四步：强制清除 currentPiece
             currentPiece = null;
-            spawnPiece();
+            
+            // ★ 第五步：延迟一帧生成新方块，确保所有同步操作完成
+            requestAnimationFrame(() => {
+                // ★ 再次确保 board 中炸弹数据已完全清除
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (board[r][c] === 8) board[r][c] = 0;
+                    }
+                }
+                // ★ 重新生成新方块
+                spawnPiece();
+            });
         }
-        // 延迟重置标志，防止快速重复点击
+        // 延迟重置标志
         clearTimeout(explodeTimeout);
         explodeTimeout = setTimeout(() => {
             isExploding = false;
-        }, 200);
+        }, 300);
     }
 
-    // 只使用 click 事件（移动端会触发 click，但不会像 touchstart 那样容易重复）
+    // 使用 click 事件
     bombBtn.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
