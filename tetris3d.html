@@ -937,10 +937,13 @@
                 e.preventDefault(); e.stopPropagation(); resetGame(); 
             });
 
-            // ★★★ 炸弹引爆按钮修复（同时支持点击和触摸） ★★★
+            // ★★★ 炸弹引爆按钮修复（防止重复触发） ★★★
             const bombBtn = document.getElementById('bomb-btn');
+            let isExploding = false;
 
             function triggerBombExplode() {
+                if (isExploding) return;
+                isExploding = true;
                 if (currentPiece && currentPiece.color === 8 && !isGameOver && !isPaused) {
                     const bombShape = currentPiece.shape;
                     const bombX = currentPiece.x;
@@ -956,19 +959,15 @@
                     bombExplosion(bombX, bombY, bombShape);
                     spawnPiece();
                 }
+                isExploding = false;
             }
 
-            // 同时支持 click 和 touchstart
-            bombBtn.addEventListener('click', function(e) {
+            // 使用 pointerdown 事件（同时支持鼠标和触摸，且不会触发两次）
+            bombBtn.addEventListener('pointerdown', function(e) {
+                e.preventDefault();
                 e.stopPropagation();
                 triggerBombExplode();
             });
-
-            bombBtn.addEventListener('touchstart', function(e) {
-                e.preventDefault();   // 防止触发页面滚动
-                e.stopPropagation();
-                triggerBombExplode();
-            }, { passive: false });
         }
 
         function createBackground() {
