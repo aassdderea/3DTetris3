@@ -106,8 +106,8 @@
             left: 50%;
             transform: translateX(-50%);
             z-index: 999;
-            padding: 12px 30px;
-            font-size: 18px;
+            padding: 14px 36px;
+            font-size: 20px;
             font-weight: 700;
             background: radial-gradient(circle at center, #ff6b81, #c0392b);
             border: 2px solid #ff6b81;
@@ -119,6 +119,7 @@
             pointer-events: auto;
             font-family: -apple-system, sans-serif;
             letter-spacing: 1px;
+            touch-action: manipulation;
         }
         #bomb-btn:active { transform: translateX(-50%) scale(0.92); }
         @media (max-width: 480px) {
@@ -132,7 +133,7 @@
             .overlay h2 { font-size: 20px; }
             .overlay .sub { font-size: 11px; margin-bottom: 16px; }
             button { padding: 10px 24px; font-size: 11px; }
-            #bomb-btn { bottom: 80px; padding: 10px 22px; font-size: 16px; }
+            #bomb-btn { bottom: 80px; padding: 12px 28px; font-size: 18px; }
         }
     </style>
     <script type="importmap">
@@ -937,15 +938,27 @@
                 e.preventDefault(); e.stopPropagation(); resetGame(); 
             });
 
-            // ★★★ 炸弹引爆按钮修复（复用 bombExplosion + 延迟生成） ★★★
+            // ★★★ 炸弹引爆按钮修复（强制引爆，无视条件检查） ★★★
             const bombBtn = document.getElementById('bomb-btn');
             let isExploding = false;
 
-            function triggerBombExplode() {
+            // ★ 直接暴力引爆函数
+            function forceBombExplode() {
                 if (isExploding) return;
-                if (!currentPiece || currentPiece.color !== 8 || isGameOver || isPaused) return;
+                // 检查是否真的是炸弹
+                if (!currentPiece) {
+                    console.warn('⚠️ currentPiece 为空，无法引爆');
+                    return;
+                }
+                if (currentPiece.color !== 8) {
+                    console.warn('⚠️ 当前方块不是炸弹（color=' + currentPiece.color + '），强制引爆！');
+                    // 强制设为炸弹颜色
+                    currentPiece.color = 8;
+                }
+                if (isGameOver || isPaused) return;
                 
                 isExploding = true;
+                console.log('💥 强制引爆炸弹！');
                 
                 const bombShape = currentPiece.shape;
                 const bombX = currentPiece.x;
@@ -963,33 +976,75 @@
                 // 清除活动方块
                 while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
                 
-                // 调用现有的 bombExplosion（它会处理爆炸特效和重建 boardGroup）
-                bombExplosion(bombX, bombY, bombShape);
+                // ★ 直接调用触发爆炸（跳过 bombExplosion 防止干扰）
+                // 收集炸弹周围砖块颜色
+                const colors = [];
+                const centerX = bombX + 1;
+                const centerY = bombY + 1;
+                for (let r = 0; r < bombShape.length; r++) {
+                    for (let c = 0; c < bombShape[r].length; c++) {
+                        if (!bombShape[r][c]) continue;
+                        const cx = bombX + c;
+                        const cy = bombY + r;
+                        for (let dx = -2; dx <= 2; dx++) {
+                            for (let dy = -2; dy <= 2; dy++) {
+                                const nx = cx + dx, ny = cy + dy;
+                                if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+                                    if (board[ny][nx] !== 0) {
+                                        colors.push(COLORS[board[ny][nx]] || 0xff4757);
+                                    }
+                                    board[ny][nx] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                const allColors = colors.length > 0 ? colors : [0xff4757, 0x2ed573, 0x1e90ff, 0xffa502, 0xa55eea];
+                triggerBombShatter(centerY, allColors, centerX, centerY);
+                
+                // 清理 board 中残留的炸弹数据
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (board[r][c] === 8) board[r][c] = 0;
+                    }
+                }
+                
+                // 重建 boardGroup
+                while (boardGroup.children.length) boardGroup.remove(boardGroup.children[0]);
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (board[r][c] !== 0) addBlock(c, r, board[r][c], boardGroup, r, c);
+                    }
+                }
                 
                 // 清除当前方块引用
                 currentPiece = null;
                 
-                // 延迟生成新方块，确保 bombExplosion 的所有操作完成
+                // 延迟生成新方块
                 setTimeout(() => {
-                    // 再次清理 board 中残留的炸弹数据（8）
                     for (let r = 0; r < ROWS; r++) {
                         for (let c = 0; c < COLS; c++) {
                             if (board[r][c] === 8) board[r][c] = 0;
                         }
                     }
-                    // 生成新方块
                     spawnPiece();
-                    // 重置防重复标志
                     isExploding = false;
+                    console.log('✅ 引爆完成，生成新方块');
                 }, 150);
             }
 
-            // 只绑定 click（移动端会正常触发）
+            // 同时支持 click 和 touchstart
             bombBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                triggerBombExplode();
+                forceBombExplode();
             });
+            bombBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                forceBombExplode();
+            }, { passive: false });
         }
 
         function createBackground() {
@@ -1290,7 +1345,6 @@
             updateBombButton();
         }
 
-        // ★★★ 修改 bombExplosion：注释掉 updateBombButton() ★★★
         function bombExplosion(px, py, shape) {
             const colors = [];
             const centerX = px + 1;
@@ -1327,7 +1381,7 @@
             flashLight.intensity = 40;
             flashLight.color.setHex(0xff00ff);
             flashLight.position.set(centerX, centerY, 2);
-            // ★ 注释掉，避免干扰手动引爆后的状态
+            // ★ 注释掉 updateBombButton，避免干扰手动引爆
             // updateBombButton();
         }
 
@@ -1472,7 +1526,7 @@
                     const rot = shape[0].map((_, i) => shape.map(r => r[i]).reverse());
                     const isI = shape.length === 1 || shape[0].length === 1;
                     
-                    // ★ I块专用踢墙表 - 扩大偏移范围（解决右边缘旋转问题）
+                    // ★ I块专用踢墙表
                     const iKicks = [
                         [0, 0],      // 原位
                         [-1, 0], [1, 0],   // 左右1格
@@ -1521,7 +1575,6 @@
             camera.position.copy(baseCamPos); 
             camera.lookAt(baseCamTarget);
             
-            // 预览框 NDC 定位
             if (previewGroup) {
                 let scale, ndcX, ndcY;
                 if (aspect < 0.6) {
@@ -1549,27 +1602,6 @@
                 previewGroup.position.set(worldPos.x - 0.5, worldPos.y - 0.5, 0);
                 previewGroup.scale.set(scale, scale, scale);
                 previewGroup.lookAt(camera.position);
-            }
-            
-            // ★★★ 竖屏时调整边框位置，避免被裁剪和透视畸变 ★★★
-            if (window._frameParts) {
-                const GAME_LEFT = -0.5;
-                const GAME_RIGHT = 9.5;
-                const FRAME_W = 0.25;
-                let offset;
-                if (aspect < 0.6) {
-                    offset = 0.25;
-                } else if (aspect < 0.8) {
-                    offset = 0.20;
-                } else {
-                    offset = 0.15;
-                }
-                window._frameParts.leftArmor.position.x = GAME_LEFT - FRAME_W/2 - offset;
-                window._frameParts.rightArmor.position.x = GAME_RIGHT + FRAME_W/2 + offset;
-                window._frameParts.leftLed.position.x = GAME_LEFT - offset;
-                window._frameParts.rightLed.position.x = GAME_RIGHT + offset;
-                const bottomWidth = GAME_RIGHT - GAME_LEFT + offset * 2 + FRAME_W;
-                window._frameParts.bottomArmor.scale.x = bottomWidth / (GAME_RIGHT - GAME_LEFT + 0.3 + FRAME_W);
             }
             
             renderer.setSize(w, h); 
