@@ -105,7 +105,7 @@
             bottom: 100px;
             left: 50%;
             transform: translateX(-50%);
-            z-index: 999; /* 提高层级 */
+            z-index: 999;
             padding: 12px 30px;
             font-size: 18px;
             font-weight: 700;
@@ -937,38 +937,59 @@
                 e.preventDefault(); e.stopPropagation(); resetGame(); 
             });
 
-            // ★★★ 炸弹引爆按钮修复（同时支持点击和触摸） ★★★
+            // ★★★ 炸弹引爆按钮修复（复用 bombExplosion + 延迟生成） ★★★
             const bombBtn = document.getElementById('bomb-btn');
+            let isExploding = false;
 
             function triggerBombExplode() {
-                if (currentPiece && currentPiece.color === 8 && !isGameOver && !isPaused) {
-                    const bombShape = currentPiece.shape;
-                    const bombX = currentPiece.x;
-                    const bombY = currentPiece.y;
-                    for (let r = 0; r < bombShape.length; r++) {
-                        for (let c = 0; c < bombShape[r].length; c++) {
-                            if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
-                                board[bombY + r][bombX + c] = 8;
-                            }
+                if (isExploding) return;
+                if (!currentPiece || currentPiece.color !== 8 || isGameOver || isPaused) return;
+                
+                isExploding = true;
+                
+                const bombShape = currentPiece.shape;
+                const bombX = currentPiece.x;
+                const bombY = currentPiece.y;
+                
+                // 将炸弹写入 board
+                for (let r = 0; r < bombShape.length; r++) {
+                    for (let c = 0; c < bombShape[r].length; c++) {
+                        if (bombShape[r][c] && bombY + r < ROWS && bombY + r >= 0) {
+                            board[bombY + r][bombX + c] = 8;
                         }
                     }
-                    while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
-                    bombExplosion(bombX, bombY, bombShape);
-                    spawnPiece();
                 }
+                
+                // 清除活动方块
+                while (activeGroup.children.length) activeGroup.remove(activeGroup.children[0]);
+                
+                // 调用现有的 bombExplosion（它会处理爆炸特效和重建 boardGroup）
+                bombExplosion(bombX, bombY, bombShape);
+                
+                // 清除当前方块引用
+                currentPiece = null;
+                
+                // 延迟生成新方块，确保 bombExplosion 的所有操作完成
+                setTimeout(() => {
+                    // 再次清理 board 中残留的炸弹数据（8）
+                    for (let r = 0; r < ROWS; r++) {
+                        for (let c = 0; c < COLS; c++) {
+                            if (board[r][c] === 8) board[r][c] = 0;
+                        }
+                    }
+                    // 生成新方块
+                    spawnPiece();
+                    // 重置防重复标志
+                    isExploding = false;
+                }, 150);
             }
 
-            // 同时支持 click 和 touchstart
+            // 只绑定 click（移动端会正常触发）
             bombBtn.addEventListener('click', function(e) {
+                e.preventDefault();
                 e.stopPropagation();
                 triggerBombExplode();
             });
-
-            bombBtn.addEventListener('touchstart', function(e) {
-                e.preventDefault();   // 防止触发页面滚动
-                e.stopPropagation();
-                triggerBombExplode();
-            }, { passive: false });
         }
 
         function createBackground() {
@@ -997,101 +1018,93 @@
             scene.add(bg);
         }
 
-        // ★★★ 流光边框（每个LED增加 userData.isFlashing 用于闪光控制） ★★★
-function createMechFrame() {
-    // ★ 超简单材质，避免光照干扰视觉
-    const armorMat = new THREE.MeshStandardMaterial({
-        color: 0x2a2a35,
-        roughness: 0.7,
-        metalness: 0.6,
-    });
-    const ledMat = new THREE.MeshStandardMaterial({
-        color: 0x000000,
-        emissive: 0xff8800,
-        emissiveIntensity: 2.0,
-        roughness: 0.1,
-        metalness: 0.0
-    });
-    
-    // ★ 边框参数——绝对对称
-    const FRAME_W = 0.3;        // 边框宽度
-    const FRAME_D = 0.6;        // 边框深度
-    const FRAME_OUTSET = -0.08;   // 外扩距离
-    const GAME_LEFT = -0.5;
-    const GAME_RIGHT = 9.5;
-    const GAME_BOTTOM = -0.5;
-    const GAME_TOP = 19.5;
+        // ★★★ 流光边框 ★★★
+        function createMechFrame() {
+            const armorMat = new THREE.MeshStandardMaterial({
+                color: 0x2a2a35,
+                roughness: 0.7,
+                metalness: 0.6,
+            });
+            const ledMat = new THREE.MeshStandardMaterial({
+                color: 0x000000,
+                emissive: 0xff8800,
+                emissiveIntensity: 2.0,
+                roughness: 0.1,
+                metalness: 0.0
+            });
+            
+            const FRAME_W = 0.3;
+            const FRAME_D = 0.6;
+            const FRAME_OUTSET = -0.08;
+            const GAME_LEFT = -0.5;
+            const GAME_RIGHT = 9.5;
+            const GAME_BOTTOM = -0.5;
+            const GAME_TOP = 19.5;
 
-    // ---- ★ 左右边框（BoxGeometry，绝对垂直） ----
-    const leftX = GAME_LEFT - FRAME_W/2 - FRAME_OUTSET;
-    const rightX = GAME_RIGHT + FRAME_W/2 + FRAME_OUTSET;
-    const frameHeight = ROWS + 0.8;  // 20.8
-    const frameCenterY = (GAME_TOP + GAME_BOTTOM) / 2; // 9.5
+            const leftX = GAME_LEFT - FRAME_W/2 - FRAME_OUTSET;
+            const rightX = GAME_RIGHT + FRAME_W/2 + FRAME_OUTSET;
+            const frameHeight = ROWS + 0.8;
+            const frameCenterY = (GAME_TOP + GAME_BOTTOM) / 2;
 
-    // 左边框
-    const leftArmor = new THREE.Mesh(
-        new THREE.BoxGeometry(FRAME_W, frameHeight, FRAME_D),
-        armorMat
-    );
-    leftArmor.position.set(leftX, frameCenterY, 0);
-    leftArmor.castShadow = true;
-    leftArmor.receiveShadow = true;
-    scene.add(leftArmor);
+            const leftArmor = new THREE.Mesh(
+                new THREE.BoxGeometry(FRAME_W, frameHeight, FRAME_D),
+                armorMat
+            );
+            leftArmor.position.set(leftX, frameCenterY, 0);
+            leftArmor.castShadow = true;
+            leftArmor.receiveShadow = true;
+            scene.add(leftArmor);
 
-    // 右边框
-    const rightArmor = new THREE.Mesh(
-        new THREE.BoxGeometry(FRAME_W, frameHeight, FRAME_D),
-        armorMat
-    );
-    rightArmor.position.set(rightX, frameCenterY, 0);
-    rightArmor.castShadow = true;
-    rightArmor.receiveShadow = true;
-    scene.add(rightArmor);
+            const rightArmor = new THREE.Mesh(
+                new THREE.BoxGeometry(FRAME_W, frameHeight, FRAME_D),
+                armorMat
+            );
+            rightArmor.position.set(rightX, frameCenterY, 0);
+            rightArmor.castShadow = true;
+            rightArmor.receiveShadow = true;
+            scene.add(rightArmor);
 
-    // ---- ★ 左右LED流光条 ----
-    const ledHeight = ROWS + 0.4;
-    const leftLed = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.06, ledHeight),
-        ledMat.clone()
-    );
-    leftLed.position.set(GAME_LEFT - FRAME_OUTSET, frameCenterY, FRAME_D/2 + 0.01);
-    leftLed.material.emissiveIntensity = 3.0;
-    leftLed.userData = { isFlashing: false };
-    scene.add(leftLed);
-    frameLedStrips.push(leftLed);
+            const ledHeight = ROWS + 0.4;
+            const leftLed = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.06, ledHeight),
+                ledMat.clone()
+            );
+            leftLed.position.set(GAME_LEFT - FRAME_OUTSET, frameCenterY, FRAME_D/2 + 0.01);
+            leftLed.material.emissiveIntensity = 3.0;
+            leftLed.userData = { isFlashing: false };
+            scene.add(leftLed);
+            frameLedStrips.push(leftLed);
 
-    const rightLed = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.06, ledHeight),
-        ledMat.clone()
-    );
-    rightLed.position.set(GAME_RIGHT + FRAME_OUTSET, frameCenterY, FRAME_D/2 + 0.01);
-    rightLed.material.emissiveIntensity = 3.0;
-    rightLed.userData = { isFlashing: false };
-    scene.add(rightLed);
-    frameLedStrips.push(rightLed);
+            const rightLed = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.06, ledHeight),
+                ledMat.clone()
+            );
+            rightLed.position.set(GAME_RIGHT + FRAME_OUTSET, frameCenterY, FRAME_D/2 + 0.01);
+            rightLed.material.emissiveIntensity = 3.0;
+            rightLed.userData = { isFlashing: false };
+            scene.add(rightLed);
+            frameLedStrips.push(rightLed);
 
-    // ---- ★ 底部边框 ----
-    const bottomWidth = GAME_RIGHT - GAME_LEFT + FRAME_OUTSET * 2 + FRAME_W;
-    const bottomArmor = new THREE.Mesh(
-        new THREE.BoxGeometry(bottomWidth, FRAME_W, FRAME_D),
-        armorMat
-    );
-    bottomArmor.position.set((GAME_LEFT + GAME_RIGHT) / 2, GAME_BOTTOM - FRAME_W/2, 0);
-    bottomArmor.castShadow = true;
-    bottomArmor.receiveShadow = true;
-    scene.add(bottomArmor);
+            const bottomWidth = GAME_RIGHT - GAME_LEFT + FRAME_OUTSET * 2 + FRAME_W;
+            const bottomArmor = new THREE.Mesh(
+                new THREE.BoxGeometry(bottomWidth, FRAME_W, FRAME_D),
+                armorMat
+            );
+            bottomArmor.position.set((GAME_LEFT + GAME_RIGHT) / 2, GAME_BOTTOM - FRAME_W/2, 0);
+            bottomArmor.castShadow = true;
+            bottomArmor.receiveShadow = true;
+            scene.add(bottomArmor);
 
-    // 底部LED条
-    const bottomLed = new THREE.Mesh(
-        new THREE.PlaneGeometry(bottomWidth - 0.4, 0.05),
-        ledMat.clone()
-    );
-    bottomLed.position.set((GAME_LEFT + GAME_RIGHT) / 2, GAME_BOTTOM - 0.1, FRAME_D/2 + 0.01);
-    bottomLed.material.emissiveIntensity = 2.5;
-    bottomLed.userData = { isFlashing: false };
-    scene.add(bottomLed);
-    frameLedStrips.push(bottomLed);
-}
+            const bottomLed = new THREE.Mesh(
+                new THREE.PlaneGeometry(bottomWidth - 0.4, 0.05),
+                ledMat.clone()
+            );
+            bottomLed.position.set((GAME_LEFT + GAME_RIGHT) / 2, GAME_BOTTOM - 0.1, FRAME_D/2 + 0.01);
+            bottomLed.material.emissiveIntensity = 2.5;
+            bottomLed.userData = { isFlashing: false };
+            scene.add(bottomLed);
+            frameLedStrips.push(bottomLed);
+        }
 
         function createPreviewPanel() {
             previewGroup = new THREE.Group(); 
@@ -1260,21 +1273,24 @@ function createMechFrame() {
                     }
                 }
             }
-            if (color === 8) bombExplosion(x, y, shape);
             
-            // ★ 计算触发方块的中心位置（用于消除特效）
+            if (color === 8) {
+                bombExplosion(x, y, shape);
+            }
+            
             const rows = shape.length;
             const cols = shape[0].length;
             const triggerX = x + cols / 2 - 0.5;
             const triggerY = y + rows / 2 - 0.5;
             
-            clearLines(triggerX, triggerY);  // ← 传入位置
+            clearLines(triggerX, triggerY);
             
             spawnPiece();
             isLocking = false;
             updateBombButton();
         }
 
+        // ★★★ 修改 bombExplosion：注释掉 updateBombButton() ★★★
         function bombExplosion(px, py, shape) {
             const colors = [];
             const centerX = px + 1;
@@ -1311,7 +1327,8 @@ function createMechFrame() {
             flashLight.intensity = 40;
             flashLight.color.setHex(0xff00ff);
             flashLight.position.set(centerX, centerY, 2);
-            updateBombButton();
+            // ★ 注释掉，避免干扰手动引爆后的状态
+            // updateBombButton();
         }
 
         function hardDrop() {
@@ -1340,7 +1357,7 @@ function createMechFrame() {
                 frameLedStrips.forEach(led => {
                     if (led.userData) led.userData.isFlashing = false;
                 });
-            }, 280);  // 稍长一点，与爆炸同步
+            }, 280);
             
             // ★ 在触发方块位置产生爆炸闪光
             const flashPos = new THREE.Vector3(triggerX, triggerY, 0);
@@ -1396,7 +1413,6 @@ function createMechFrame() {
             if (score > highScore) { highScore = score; saveHighScore(); }
             document.getElementById('score').innerText = score;
             
-            // 速度控制：4800分时达到最快（80ms）
             if (score >= 4800) {
                 dropInterval = 200;
             } else {
@@ -1489,77 +1505,77 @@ function createMechFrame() {
             }
         }
 
-function onResize() {
-    const w = window.innerWidth, h = window.innerHeight;
-    const aspect = w / h;
-    camera.aspect = aspect;
-    const ba = COLS / (ROWS + 2);
-    let fov = aspect > ba ? 
-        2 * Math.atan((ROWS + 2) / (2 * CAM_DISTANCE)) * (180 / Math.PI) : 
-        2 * Math.atan(COLS / (2 * CAM_DISTANCE * aspect)) * (180 / Math.PI);
-    fov = Math.max(30, Math.min(fov, 62));
-    camera.fov = fov; 
-    camera.updateProjectionMatrix();
-    baseCamTarget.set(COLS/2-0.5, ROWS/2-1.0, 0);
-    baseCamPos.set(COLS/2-0.5, ROWS/2-1.0+CAM_HEIGHT_OFFSET, CAM_DISTANCE);
-    camera.position.copy(baseCamPos); 
-    camera.lookAt(baseCamTarget);
-    
-    // 预览框 NDC 定位（保持不变）
-    if (previewGroup) {
-        let scale, ndcX, ndcY;
-        if (aspect < 0.6) {
-            scale = 0.50;
-            ndcX = 0.72;
-            ndcY = 0.52;
-        } else if (aspect < 0.8) {
-            scale = 0.52;
-            ndcX = 0.74;
-            ndcY = 0.53;
-        } else if (aspect < 1.2) {
-            scale = 0.55;
-            ndcX = 0.76;
-            ndcY = 0.55;
-        } else {
-            scale = 0.58;
-            ndcX = 0.78;
-            ndcY = 0.57;
+        function onResize() {
+            const w = window.innerWidth, h = window.innerHeight;
+            const aspect = w / h;
+            camera.aspect = aspect;
+            const ba = COLS / (ROWS + 2);
+            let fov = aspect > ba ? 
+                2 * Math.atan((ROWS + 2) / (2 * CAM_DISTANCE)) * (180 / Math.PI) : 
+                2 * Math.atan(COLS / (2 * CAM_DISTANCE * aspect)) * (180 / Math.PI);
+            fov = Math.max(30, Math.min(fov, 62));
+            camera.fov = fov; 
+            camera.updateProjectionMatrix();
+            baseCamTarget.set(COLS/2-0.5, ROWS/2-1.0, 0);
+            baseCamPos.set(COLS/2-0.5, ROWS/2-1.0+CAM_HEIGHT_OFFSET, CAM_DISTANCE);
+            camera.position.copy(baseCamPos); 
+            camera.lookAt(baseCamTarget);
+            
+            // 预览框 NDC 定位
+            if (previewGroup) {
+                let scale, ndcX, ndcY;
+                if (aspect < 0.6) {
+                    scale = 0.50;
+                    ndcX = 0.72;
+                    ndcY = 0.52;
+                } else if (aspect < 0.8) {
+                    scale = 0.52;
+                    ndcX = 0.74;
+                    ndcY = 0.53;
+                } else if (aspect < 1.2) {
+                    scale = 0.55;
+                    ndcX = 0.76;
+                    ndcY = 0.55;
+                } else {
+                    scale = 0.58;
+                    ndcX = 0.78;
+                    ndcY = 0.57;
+                }
+                const ndcPos = new THREE.Vector3(ndcX, ndcY, 0.5);
+                ndcPos.unproject(camera);
+                const dir = ndcPos.sub(camera.position).normalize();
+                const t = -camera.position.z / dir.z;
+                const worldPos = camera.position.clone().add(dir.multiplyScalar(t));
+                previewGroup.position.set(worldPos.x - 0.5, worldPos.y - 0.5, 0);
+                previewGroup.scale.set(scale, scale, scale);
+                previewGroup.lookAt(camera.position);
+            }
+            
+            // ★★★ 竖屏时调整边框位置，避免被裁剪和透视畸变 ★★★
+            if (window._frameParts) {
+                const GAME_LEFT = -0.5;
+                const GAME_RIGHT = 9.5;
+                const FRAME_W = 0.25;
+                let offset;
+                if (aspect < 0.6) {
+                    offset = 0.25;
+                } else if (aspect < 0.8) {
+                    offset = 0.20;
+                } else {
+                    offset = 0.15;
+                }
+                window._frameParts.leftArmor.position.x = GAME_LEFT - FRAME_W/2 - offset;
+                window._frameParts.rightArmor.position.x = GAME_RIGHT + FRAME_W/2 + offset;
+                window._frameParts.leftLed.position.x = GAME_LEFT - offset;
+                window._frameParts.rightLed.position.x = GAME_RIGHT + offset;
+                const bottomWidth = GAME_RIGHT - GAME_LEFT + offset * 2 + FRAME_W;
+                window._frameParts.bottomArmor.scale.x = bottomWidth / (GAME_RIGHT - GAME_LEFT + 0.3 + FRAME_W);
+            }
+            
+            renderer.setSize(w, h); 
+            composer.setSize(w, h);
         }
-        const ndcPos = new THREE.Vector3(ndcX, ndcY, 0.5);
-        ndcPos.unproject(camera);
-        const dir = ndcPos.sub(camera.position).normalize();
-        const t = -camera.position.z / dir.z;
-        const worldPos = camera.position.clone().add(dir.multiplyScalar(t));
-        previewGroup.position.set(worldPos.x - 0.5, worldPos.y - 0.5, 0);
-        previewGroup.scale.set(scale, scale, scale);
-        previewGroup.lookAt(camera.position);
-    }
-    
-    // ★★★ 竖屏时调整边框位置，避免被裁剪和透视畸变 ★★★
-    if (window._frameParts) {
-        const GAME_LEFT = -0.5;
-        const GAME_RIGHT = 9.5;
-        const FRAME_W = 0.25;
-        let offset;
-        if (aspect < 0.6) {
-            offset = 0.25;  // 超窄竖屏，边框大幅内收
-        } else if (aspect < 0.8) {
-            offset = 0.20;  // 普通竖屏，适度内收
-        } else {
-            offset = 0.15;  // 横屏/正方形，正常外扩
-        }
-        window._frameParts.leftArmor.position.x = GAME_LEFT - FRAME_W/2 - offset;
-        window._frameParts.rightArmor.position.x = GAME_RIGHT + FRAME_W/2 + offset;
-        window._frameParts.leftLed.position.x = GAME_LEFT - offset;
-        window._frameParts.rightLed.position.x = GAME_RIGHT + offset;
-        // 底部边框同步微调
-        const bottomWidth = GAME_RIGHT - GAME_LEFT + offset * 2 + FRAME_W;
-        window._frameParts.bottomArmor.scale.x = bottomWidth / (GAME_RIGHT - GAME_LEFT + 0.3 + FRAME_W);
-    }
-    
-    renderer.setSize(w, h); 
-    composer.setSize(w, h);
-}
+
         const clock = new THREE.Clock();
         function animate() {
             requestAnimationFrame(animate);
@@ -1588,7 +1604,7 @@ function onResize() {
                 previewGroup.lookAt(camera.position);
             }
             
-            // ★ 预览框流光 + 边框流光（跳过正在闪光的LED）
+            // ★ 预览框流光 + 边框流光
             if (!isPaused) {
                 const t = now * 0.002;
                 const speed = 1.2;
@@ -1601,7 +1617,6 @@ function onResize() {
                     led.material.emissiveIntensity = 2.0 + brightness * 3.0;
                 });
                 frameLedStrips.forEach((led, i) => {
-                    // ★ 如果正在闪光，跳过流光更新，保持白色高亮
                     if (led.userData && led.userData.isFlashing) return;
                     const phase = (i / frameLedStrips.length) * Math.PI * 2 + t * speed;
                     const brightness = 0.5 + 0.5 * Math.sin(phase);
@@ -1640,7 +1655,6 @@ function onResize() {
             document.getElementById('gameover-overlay').style.display = 'none';
             document.getElementById('pause-indicator').style.display = 'none';
             document.getElementById('bomb-btn').style.display = 'none';
-            // ★ 重置边框闪光状态
             frameLedStrips.forEach(led => {
                 if (led.userData) led.userData.isFlashing = false;
             });
